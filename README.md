@@ -2,7 +2,7 @@
 
 `lviv` is a functional RPN programming language.
 
-The name comes from the city of Lviv, where Jan Lukasiewicz was born. Lukasiewicz invented prefix or "Polish" notation to simplify the syntax of sentential logic; later, Burks, Warren, and Wright (and later Bauer and Dijkstra) proposed postfix, or "reverse Polish" notation as a good fit for stack based machines.
+The name comes from the city of Lviv, where Jan Lukasiewicz was born. Lukasiewicz invented prefix or "Polish" notation to simplify the syntax of sentential logic; later, Burks, Warren, and Wright (and even later Bauer and Dijkstra) proposed postfix, or "reverse Polish" notation as a good fit for stack based machines.
 
 ## RPN basics
 
