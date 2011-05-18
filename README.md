@@ -226,8 +226,9 @@ In `lviv`, all variables are statically scoped to *some* environment. However, b
 Static variables (invoked with `&`) bind immediately to the enclosing environment when the variable is put on the stack.
 
 Automatic variables (invoked with `@`) behave like statically scoped variables, except that their binding is not fixed when they are put on the stack. Instead, they are bound when their enclosing thunk is passed to `lambda`, `let`, or `eval`, according to the following rules:
-	- If a `lambda` or `let` encloses an automatically scoped variable and the variable's identifier matches one of the `lambda` or `let` bindings, the variable is bound to the `lambda` or `let` environment.
-	- Otherwise, the variable becomes bound to the environment enclosing the `lambda`, `let`, or `eval`.
+
+- If a `lambda` or `let` encloses an automatically scoped variable and the variable's identifier matches one of the `lambda` or `let` bindings, the variable is bound to the `lambda` or `let` environment.
+- Otherwise, the variable becomes bound to the environment enclosing the `lambda`, `let`, or `eval`.
 
 ### Thunks
 
