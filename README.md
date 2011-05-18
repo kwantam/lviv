@@ -154,7 +154,9 @@ Many mathematical operations, including arithmetic, trigonometric, and complex f
 
 ### Lists
 
-Lists in `lviv` have a syntax similar to those in Haskell. Formally, a list is defined either as the empty list, or as the result of the cons operation `:` on an element and a list. `head` and `tail` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail followed by the head. `++_` and `_++` are the left and right append operators, respectively. (The underscore indicates which side the 0th element of the stack goes.)
+Lists in `lviv` have a syntax similar to those in Haskell, but are heterogeneous collections more akin to LISP lists. Formally, a list is defined either as the empty list, or as the result of the cons operation `:` on an element and a list. An element is anything that can be a stack entry.
+
+`head` and `tail` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail and the head. `++_` and `_++` are the left and right append operators, respectively. (The underscore indicates which side the 0th element of the stack goes.)
 
 `[a,[b,c],d]`-like syntax can be used to create a list directly.
 
@@ -198,9 +200,9 @@ Tuples in `lviv` are also similar to their Haskell counterparts. The tuple opera
 
 `define` binds the identifier in the 0th position on the stack with the value in the 1st in the containing environment.
 
-Identifiers can contain alphanumerics or any of `! $ % + - < = > ? ^ _ ~`, but must begin with an alphabetic character.
+Identifiers can contain alphanumerics or any of `! $ % & * + - . / : < = > ? @ ^ _ ~`, but must begin with a character that cannot begin a number and is not otherwise reserved (i.e., any valid character other than `. + - & @`).
 
-When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&`, `@`, or `*` prefix can be used. The `&` prefix produces a binding to the present environment (static scope), whereas the `*` prefix binds to the enclosing environment at the time of evaluation (dynamic scope). The `@` prefix invokes *automatic* scope, described below.
+When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `@` sigil can be used. The `&` sigil indicates that the variable is statically bound in enclosing environment (Scheme-style static scope), whereas the `@` prefix invokes *automatic* scope, described below.
 
     > 1 z define
     --> z : 1
@@ -219,11 +221,13 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
 
 #### Scope
 
-In `lviv`, there are three types of scoping available.
+In `lviv`, all variables are statically scoped to *some* environment. However, because thunks must be defined before being bound by `lambda` or `let`, immediate static scoping is insufficient. *Automatic* or *delayed static* scoping allows variables in a thunk to be statically bound inside their enclosing `lambda` or `let`.
 
-- Static (lexical) variables bind statically to the environment in which they were defined.
-- Dynamic variables bind to the enclosing environment at the time of their evaluation.
-- Automatic variables behave like lexically scoped variables, except that when they are bound inside a `lambda` or `let` and match one of the bindings inside that environment, they become lexically scoped to the environment. See *`lambda`* and *`let`*, below.
+Static variables (invoked with `&`) bind immediately to the enclosing environment when the variable is put on the stack.
+
+Automatic variables (invoked with `@`) behave like statically scoped variables, except that their binding is not fixed when they are put on the stack. Instead, they are bound when their enclosing thunk is passed to `lambda`, `let`, or `eval`, according to the following rules:
+	- If a `lambda` or `let` encloses an automatically scoped variable and the variable's identifier matches one of the `lambda` or `let` bindings, the variable is bound to the `lambda` or `let` environment.
+	- Otherwise, the variable becomes bound to the environment enclosing the `lambda`, `let`, or `eval`.
 
 ### Thunks
 
@@ -247,7 +251,7 @@ Thunks can be denoted by enclosing an expression in braces (`{}`).
 
 #### Unbound identifiers
 
-Referencing an unbound identifier in an expression results in a thunk where the unbound identifier is automatically scoped (as if invoked with `@identifier`; you will soon see that this is useful because of how `lambda` works). Lexically and dynamically scoped unbound identifiers can also be invoked using `&` and `*`, respectively.
+Referencing an unbound identifier in an expression results in a thunk where the unbound identifier is automatically scoped (as if invoked with `@identifier`). Statically scoped unbound identifiers can also be invoked using `&`.
 
     > x
     @x : #<unbound>
@@ -258,13 +262,13 @@ Referencing an unbound identifier in an expression results in a thunk where the 
     > eval
     --> error: unbound variables x,y in eval
     #<thunk { @x 1 + 3 * &y - }>
-    > *z /
-    #<thunk { @x 1 + 3 * &y - *z / }>
+    > @z /
+    #<thunk { @x 1 + 3 * &y - @z / }>
     > 1 z define eval
     --> error: unbound variables x,y in eval
-    #<thunk { @x 1 + 3 * &y - *z / }>
+    #<thunk { @x 1 + 3 * &y - @z / }>
 
-Note that when an unbound variable error occurs, all bindings are undone. If the thunk were later evaluated in another scope where `z` had a different meaning, the new value of z would apply.
+Note that when an unbound variable error occurs during an eval, all bindings are undone and the stack is unchanged.
 
 #### Positional identifiers
 
@@ -285,6 +289,10 @@ Positional identifiers are identifiers of the form `#[0-9]+` which are unbound u
     > eval
     1
     3
+
+When thunks are nested, positional identifiers are relative to the immediately containing thunk. To escape nesting levels, prepend additional `#`s to the identifier.
+
+	> 0 { { 1 ##0 / } 0 #0 == dropIf } eval
 
 ### Lambdas
 
@@ -330,12 +338,12 @@ The `let` expression uses a named binding list rather than a positional binding 
 
     > 2 a define
     --> a : 2
-    > { &a @a b + * } [(a,1),(b,@a &a +)] let
+    > { &a a b + * } [(a,1),(b,a &a +)] let
     8
-    > *z +
-    #<thunk { 8 *z + }>
+    > z +
+    #<thunk { 8 @z + }>
     > a * [(a,1)] let
-    #<thunk { 8 *z + 1 * }>
+    #<thunk { 8 &z + 1 * }>
 
 ### `<consequent> <alternative> <test> if`
 
@@ -352,7 +360,7 @@ The `let` expression uses a named binding list rather than a positional binding 
     2
 
 Here's a contrived example where you'd need to delay evaluation:
-    
+
     > { 1 0 / } { NaN } 0 0 /= if
     NaN
 
