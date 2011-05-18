@@ -282,11 +282,11 @@ Positional identifiers are identifiers of the form `#[0-9]+` which are unbound u
     1
     > #0 1 +
     1
-    #<thunk { #0 1 +}>
+    #<thunk { #0 1 + }>
     > 2 swap
     1
     2
-    #<thunk { #0 1 +}>
+    #<thunk { #0 1 + }>
     > eval
     1
     3
@@ -297,7 +297,7 @@ When thunks are nested, positional identifiers are relative to the immediately c
 
 ### Lambdas
 
-`lambda` combines a thunk and a positional binding list into a function. Thunks using positional identifiers can be used in lambdas, but it's probably better not to for clarity's sake.
+`lambda` combines a thunk and a positional binding list into a function. Thunks using positional identifiers cannot be bound with a `lambda`.
 
 Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. Any automatically scoped variables in the thunk that correspond to identifiers in the positional binding list become lexically scoped to the `lambda`, resulting in a closure.
 
