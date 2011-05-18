@@ -198,9 +198,9 @@ Tuples in `lviv` are also similar to their Haskell counterparts. The tuple opera
 
 `define` binds the identifier in the 0th position on the stack with the value in the 1st in the containing environment.
 
-Identifiers can contain alphanumerics or any of `! $ % + - < = > ? @ ^ _ ~`, but must begin with an alphabetic character.
+Identifiers can contain alphanumerics or any of `! $ % + - < = > ? ^ _ ~`, but must begin with an alphabetic character.
 
-When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, either the `&` or `*` prefix can be used. The `&` prefix produces a binding to the present environment (static scope), whereas the `*` prefix binds to the enclosing environment at the time of evaluation (dynamic scope).
+When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&`, `@`, or `*` prefix can be used. The `&` prefix produces a binding to the present environment (static scope), whereas the `*` prefix binds to the enclosing environment at the time of evaluation (dynamic scope). The `@` prefix invokes *automatic* scope, described below.
 
     > 1 z define
     --> z : 1
@@ -216,6 +216,14 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     #<thunk { 1 &z + }>
     > eval
     3
+
+#### Scope
+
+In `lviv`, there are three types of scoping available.
+
+- Static (lexical) variables bind statically to the environment in which they were defined.
+- Dynamic variables bind to the enclosing environment at the time of their evaluation.
+- Automatic variables behave like lexically scoped variables, except that when they are bound inside a `lambda` or `let` and match one of the bindings inside that environment, they become lexically scoped to the environment. See *`lambda`* and *`let`*, below.
 
 ### Thunks
 
@@ -239,24 +247,24 @@ Thunks can be denoted by enclosing an expression in braces (`{}`).
 
 #### Unbound identifiers
 
-Referencing an unbound identifier in an expression results in a thunk where the unbound identifier is dynamically scoped (as if invoked with `*identifier`; you will soon see that this is useful because of how `lambda` works). Lexically scoped unbound identifiers can also be invoked using `&`.
+Referencing an unbound identifier in an expression results in a thunk where the unbound identifier is automatically scoped (as if invoked with `@identifier`; you will soon see that this is useful because of how `lambda` works). Lexically and dynamically scoped unbound identifiers can also be invoked using `&` and `*`, respectively.
 
     > x
-    *x : #<unbound>
+    @x : #<unbound>
     > 1 +
-    #<thunk { *x 1 + }>
+    #<thunk { @x 1 + }>
     > 3 * &y -
-    #<thunk { *x 1 + 3 * &y - }>
+    #<thunk { @x 1 + 3 * &y - }>
     > eval
     --> error: unbound variables x,y in eval
-    #<thunk { *x 1 + 3 * &y - }>
-    > &z /
-    #<thunk { *x 1 + 3 * &y - &z / }>
+    #<thunk { @x 1 + 3 * &y - }>
+    > *z /
+    #<thunk { @x 1 + 3 * &y - *z / }>
     > 1 z define eval
     --> error: unbound variables x,y in eval
-    #<thunk { *x 1 + 3 * &y - &z / }>
+    #<thunk { @x 1 + 3 * &y - *z / }>
 
-Note that when an unbound variable error occurs, all bindings are undone. If z were redefined in the lexical scope before x and y became available, the new value of z would apply when the expression was next evaluated.
+Note that when an unbound variable error occurs, all bindings are undone. If the thunk were later evaluated in another scope where `z` had a different meaning, the new value of z would apply.
 
 #### Positional identifiers
 
@@ -282,14 +290,14 @@ Positional identifiers are identifiers of the form `#[0-9]+` which are unbound u
 
 `lambda` combines a thunk and a positional binding list into a function. Thunks using positional identifiers can be used in lambdas, but it's probably better not to for clarity's sake.
 
-Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. Any dynamically scoped variables in the thunk that correspond to identifiers in the positional binding list become lexically scoped to the `lambda`, resulting in a closure.
+Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. Any automatically scoped variables in the thunk that correspond to identifiers in the positional binding list become lexically scoped to the `lambda`, resulting in a closure.
 
     > x
-    *x : #<unbound>
+    @x : #<unbound>
     > 1 +
-    #<thunk { *x 1 + }>
-    > *y *
-    #<thunk { *x 1 + *y * }>
+    #<thunk { @x 1 + }>
+    > y *
+    #<thunk { @x 1 + @y * }>
     > [y,x] lambda
     #<lambda [y,x] thunk { x 1 + y * }>
     > 2 1
@@ -318,13 +326,13 @@ The above lambda is equivalent to
 
 `let` is similar to `lambda`: it takes a thunk and a binding list. `let` is evaluated immediately and the result of the evaluation is pushed onto the stack. If the `let` expression contains unbound variables after evaluation, its result is a thunk.
 
-The `let` expression uses a named binding list rather than a positional binding list. A named binding list is a list of tuples which are bound sequentially and then evaluated. In this way, `let` behaves much like Scheme's `letrec`: variables inside the named binding list may reference other variables in the list whether they are bound before or after. Like the `lambda`, dynamically scoped variables in the thunk and the RHS of the named binding tuples that correspond to identifiers in the named binding list become lexically scoped to the `let`. This means that named bindings need not shadow variables in enclosing environments.
+The `let` expression uses a named binding list rather than a positional binding list. A named binding list is a list of tuples which are bound sequentially and then evaluated. In this way, `let` behaves much like Scheme's `letrec`: variables inside the named binding list may reference other variables in the list whether they are bound before or after. Like the `lambda`, automatically scoped variables in the thunk and the RHS of the named binding tuples that correspond to identifiers in the named binding list become lexically scoped to the `let`. This means that named bindings need not shadow variables in enclosing environments, since lexical bindings can be passed in.
 
     > 2 a define
     --> a : 2
-    > { &a *a b + * } [(a,1),(b,a &a +)] let
+    > { &a @a b + * } [(a,1),(b,@a &a +)] let
     8
-    > z +
+    > *z +
     #<thunk { 8 *z + }>
     > a * [(a,1)] let
     #<thunk { 8 *z + 1 * }>
