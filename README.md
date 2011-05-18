@@ -163,18 +163,18 @@ Lists in `lviv` have a syntax similar to those in Haskell. Formally, a list is d
     > 1 :
     [1]
     > 2 :
-    [1,2]
+    [2,1]
     > [3,4] ++_
-    [1,2,3,4]
+    [2,1,3,4]
     > uncons
-    [2,3,4]
-    1
-    > :
-    [1,2,3,4]
-    > tail
-    [2,3,4]
-    > head
+    [1,3,4]
     2
+    > :
+    [2,1,3,4]
+    > tail
+    [1,3,4]
+    > head
+    1
 
 Strings are just lists of characters, so they can be operated upon by all list operations.
 
@@ -219,7 +219,7 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
 
 ### Thunks
 
-`lviv` represents delayed computations using thunks. The `eval` function attempts to apply a thunk, popping positionally referenced variables from the stack and binding them before evaluation. If the thunk references unbound variables, an error results from the computation and the stack is unmodified. `eval`ing a literal expression has no effect.
+`lviv` represents delayed computations using thunks. The `eval` function attempts to apply a thunk, popping positionally referenced variables from the stack and binding them before evaluation. If the thunk references unbound variables, an error results from the computation and the stack is unmodified. `eval`ing a literal expression has no effect. If an error occurs during evaluation after the binding step, the modifications to the stack still occur and the value of the thunk becomes `nop`.
 
     > 1 eval
     1
@@ -232,8 +232,7 @@ Thunks can be denoted by enclosing an expression in braces (`{}`).
     #<thunk { 1 0 / }>
     > eval
     --> error: division by zero
-    #<thunk { 1 0 / }>
-    > drop 1 z define { 1 z + }
+    > 1 z define { 1 z + }
     #<thunk { 1 1 + }>
     > 2 z define eval
     2
@@ -247,7 +246,7 @@ Referencing an unbound identifier in an expression results in a thunk where the 
     > 1 +
     #<thunk { *x 1 + }>
     > 3 * &y -
-    #<thunk { *x 1 + 3 * &y -}>
+    #<thunk { *x 1 + 3 * &y - }>
     > eval
     --> error: unbound variables x,y in eval
     #<thunk { *x 1 + 3 * &y - }>
@@ -257,7 +256,7 @@ Referencing an unbound identifier in an expression results in a thunk where the 
     --> error: unbound variables x,y in eval
     #<thunk { *x 1 + 3 * &y - &z / }>
 
-Note that when an error occurs, no bindings take place. If z were redefined in the lexical scope before x and y became available, the new value of z would apply when the expression was applied.
+Note that when an unbound variable error occurs, all bindings are undone. If z were redefined in the lexical scope before x and y became available, the new value of z would apply when the expression was next evaluated.
 
 #### Positional identifiers
 
@@ -283,7 +282,7 @@ Positional identifiers are identifiers of the form `#[0-9]+` which are unbound u
 
 `lambda` combines a thunk and a positional binding list into a function. Thunks using positional identifiers can be used in lambdas, but it's probably better not to for clarity's sake.
 
-Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. Any dynamically scoped variables in the thunk that correspond to identifiers in the positional binding list become lexically scoped to the lambda, resulting in the lambda's closing over the variables in the positional binding list.
+Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. Any dynamically scoped variables in the thunk that correspond to identifiers in the positional binding list become lexically scoped to the `lambda`, resulting in a closure.
 
     > x
     *x : #<unbound>
@@ -292,15 +291,15 @@ Positional binding lists map variables inside the thunk to positional references
     > *y *
     #<thunk { *x 1 + *y * }>
     > [y,x] lambda
-    #<lambda [y,x] thunk { &x 1 + &y * }>
+    #<lambda [y,x] thunk { x 1 + y * }>
     > 2 1
-    #<lambda [y,x] thunk { &x 1 + &y * }>
+    #<lambda [y,x] thunk { x 1 + y * }>
     2
     1
     > 3 roll
     2
     1
-    #<lambda [y,x] thunk { &x 1 + &y * }>
+    #<lambda [y,x] thunk { x 1 + y * }>
     > eval
     3
 
