@@ -101,19 +101,23 @@ Swap the 0th and 1st entry in the stack.
 ### `<n> pick`
 ### `over`
 
-`pick` pops the 0th element off the stack, then pushes a copy of the `n`th remaining element onto the stack. `over` is equivalent to `1 pick`.
+`pick` pops the 0th element off the stack, then pushes a copy of the `n`th element onto the stack. `over` is equivalent to `2 pick`.
 
     > 1 2 3
     1
     2
     3
+    > over
+    1
+    2
+    3
+    2
     > 2 pick
     1
     2
     3
-    1
-
-Note that the `pick` implementation on HP calculators uses one-based rather than 0-based indexing.
+    2
+    3
 
 ### `depth`
 
