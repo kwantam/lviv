@@ -23,7 +23,14 @@
 ; **** MISC ****
 ; **************
 
-; splitAt, like the haskell function
+; take, like the Haskell function
+; take :: Int -> [a] -> [a]
+(define (take n lst)
+  (cond ((= n 0) '())
+        ((null? lst) '())
+        (else (cons (car lst) (take (- n 1) (cdr lst))))))
+
+; splitAt, like the Haskell function
 ; splitAt :: Int -> [a] -> ([a],[a])
 (define (splitAt n lst)
   (letrec 
@@ -73,11 +80,20 @@
 
 ; eLeft and eRight are like the Either monad
 ; eRight signals success, eLeft signals failure
-(define (eLeft msg) (cons #f msg))
-(define (eRight msg) (cons #t msg))
-(define (eRight? either) (and (pair? either) (car either)))
-(define (eLeft? either) (and (pair? either) (not (car either))))
+(define (eLeft msg) (if (eLeft? msg) msg (cons '(either #f) msg)))
+(define (eRight msg) (if (eRight? msg) msg (cons '(either #t) msg)))
+(define (eRight? either) (and (pair? either) (equal? '(either #t) (car either))))
+(define (eLeft? either) (and (pair? either) (equal? '(either #f) (car either))))
 (define fromLeftRight cdr)
+
+; strict truth and falsity tests
+(define (=bool? b)
+  (lambda (x)
+    (if (not (boolean? x))
+      (raise "type error")
+      (eq? b x))))
+(define =true? (=bool? #t))
+(define =false? (=bool? #f))
 
 ; ***************
 ; **** STATE ****
@@ -155,12 +171,12 @@
 ; this is used when executing functions
 (define (stackPopN n)
   (lambda (stack)
-    (if (<= (depth stack) n)
-      (cons (eLeft "popN: not enough arguments") '())
+    (if (< (depth stack) n)
+      (cons (eLeft "popN: not enough arguments") stack)
       (letrec ((sPopNHlp
                  (lambda (stack accum n)
                    (if (= n 0)
-                     (cons (eRight (reverse accum)) stack)
+                     (cons (eRight accum) stack)
                      (sPopNHlp (cdr stack) (cons (car stack) accum) (- n 1))))))
         (sPopNHlp stack '() n)))))
 (define (stStackNPop state n) (stStackUpd2 (stackPopN n) state))
@@ -244,30 +260,69 @@
            (popEither (car popVal))
            (popRes (fromLeftRight popEither))
            (popRem (cdr popVal)))
-      (cond ((eLeft? popEither) popVal)
-            ((not (boolean? popRes)) (cons (eLeft "stackOpBool: not a boolean") stack))
-            ((eq? bool popRes) (f popRem))
-            (else (cons (eRight '()) popRem))))))
+      (with-exception-catcher
+        (lambda (x) (cons (eLeft "type error") stack))
+        (lambda ()
+          (cond ((eLeft? popEither) popVal)
+                ((bool popRes) (f popRem))
+                (else (cons (eRight '()) popRem))))))))
 
 ; swapIf
 (define stackSwapIf
-  (stackOpBool #t stackSwap))
+  (stackOpBool =true? stackSwap))
 (define (stStackSwapIf state) (stStackUpd2 stackSwapIf state))
 
 ; swapUnless
 (define stackSwapUnless
-  (stackOpBool #f stackSwap))
+  (stackOpBool =false? stackSwap))
 (define (stStackSwapUnless state) (stStackUpd2 stackSwapUnless state))
 
 ; dropIf
 (define stackDropIf
-  (stackOpBool #t stackDrop))
+  (stackOpBool =true? stackDrop))
 (define (stStackDropIf state) (stStackUpd2 stackDropIf state))
 
 ; dropUnless
 (define stackDropUnless
-  (stackOpBool #f stackDrop))
+  (stackOpBool =false? stackDrop))
 (define (stStackDropUnless state) (stStackUpd2 stackDropUnless state))
+
+; uncons
+; if the first element of the stack is a list, replace it
+; with car and cdr of list in 0th and 1st positions, respectively
+(define (stackUncons stack)
+  (let* ((popVal (stackPop stack))
+         (popEither (car popVal))
+         (popRes (fromLeftRight popEither))
+         (popRem (cdr popVal)))
+    (cond ((eLeft? popEither) popVal)
+          ((not (pair? popRes)) (cons (eLeft "not a pair") stack))
+          (else (cons (eRight '()) 
+                      (append (list (car popRes) (cdr popRes))
+                              popRem))))))
+(define (stStackUncons state) (stStackUpd2 stackUncons state))
+
+(define (stackOp? symb f)
+  (lambda (op) (if (eq? symb op) f #f)))
+
+; stackop lookup
+(define (stStackOp? op)
+  (or ((stackOp? 'depth stStackDepth) op)
+      ((stackOp? 'swap stStackSwap) op)
+      ((stackOp? 'drop stStackDrop) op)
+      ((stackOp? 'clear stStackClear) op)
+      ((stackOp? 'dropN stStackDropN) op)
+      ((stackOp? 'roll stStackRollN) op)
+      ((stackOp? 'unroll stStackUnrollN) op)
+      ((stackOp? 'dup stStackDup) op)
+      ((stackOp? 'dupN stStackDupN) op)
+      ((stackOp? 'over stStackOver) op)
+      ((stackOp? 'pick stStackPickN) op)
+      ((stackOp? 'swapIf stStackSwapIf) op)
+      ((stackOp? 'swapUnless stStackSwapUnless) op)
+      ((stackOp? 'dropIf stStackDropIf) op)
+      ((stackOp? 'dropUnless stStackDropUnless) op)
+      ((stackOp? 'uncons stStackUncons) op)))
 
 ; #############
 ; #### ENV #### 
@@ -343,14 +398,31 @@
       (lookupHlp (envBindings env)))))
 (define stEnvLookupBinding (stEnvBindOp envLookupBinding))
 
-; ###########################
-; #### EXCEPTION HANDLER ####
-; ###########################
+; ############################
+; #### EXCEPTION HANDLING ####
+; ############################
+
+; rewind is an exception object that we raise
+; when we want to undo some effect on the stack
+(define (rewind state stackArgs msg)
+  (raise (list 'rewind state stackArgs msg)))
+
+(define (rewind? exc)
+  (and (list? exc) (eq? (car exc) 'rewind) (= (length exc) 4)))
+
 ; we want to provide reasonable exceptions to the user, so we do our best
 ; to catch what's coming from the interpreter and turn it into something
 ; intelligible
 (define (exceptionHandler exc)
-  (cond ((noncontinuable-exception? exc) (eLeft (noncontinuable-exception-reason exc)))
+  (cond ((rewind? exc)
+         (let ((state (cadr exc))
+               (stackArgs (caddr exc))
+               (msg (cadddr exc)))
+           (if (pair? stackArgs)
+             (stStackNPush state stackArgs)
+             (stStackPush state stackArgs))
+           (eLeft msg)))
+        ((noncontinuable-exception? exc) (eLeft (noncontinuable-exception-reason exc)))
         ((heap-overflow-exception? exc) (eLeft "heap overflow"))
         ((stack-overflow-exception? exc) (eLeft "call stack overflow"))
         ((os-exception? exc) (eLeft (os-exception-message exc)))
@@ -396,52 +468,244 @@
   (and (list? obj) (eq? (car obj) 'primitive) (= (length obj) 3)))
 
 ; primitive call
-(define (stPrimCall state)
-  (let* ((fName (stStackPop state))
-         (fBinding (delay (stEnvLookupBinding state (fromLeftRight fName))))
-         (fnNArgs (delay (primitive-arity (fromLeftRight (force fBinding)))))
+(define (stPrimCall state binding)
+  (let* ((fnNArgs (delay (abs (primitive-arity binding))))
          (fnArgs (delay (stStackNPop state (force fnNArgs))))
          (fnCompResult
            (lambda ()
-             (eRight (apply (eval (primitive-id (fromLeftRight (force fBinding))))
+             (eRight (apply (eval (primitive-id binding))
                             (fromLeftRight (force fnArgs))))))
          (fnResult (delay (with-exception-catcher exceptionHandler fnCompResult))))
-    (cond ((eLeft? fName) fName)
-          ((eLeft? (force fBinding)) 
-           (begin (stStackPush state (fromLeftRight fName))
-                  (force fBinding)))
-          ((not (primitive? (fromLeftRight (force fBinding))))
-           (begin (stStackPush state (fromLeftRight fName))
-                  (eLeft "not a primitive procedure")))
-          ((eLeft? (force fnArgs)) (force fnArgs))
+    (with-exception-catcher exceptionHandler (lambda ()
+    (cond ((eLeft? (force fnArgs)) (force fnArgs))
+            ; if there aren't enough args, the procedure fails
+            ; and the stack doesn't get rewound any further
+            ; note that if stStackNPop fails, it will rewind what
+            ; it did
           ((eLeft? (force fnResult))
-           (begin (stStackNPush state (fromLeftRight (force fnArgs)))
-                  (force fnResult)))
-          (else (stStackPush state (fromLeftRight (force fnResult)))))))
+           (rewind state
+                   (reverse (fromLeftRight (force fnArgs)))
+                   (force fnResult)))
+            ; if the primitive application fails, put the args
+            ; back on the stack
+          (else (stStackPush state (fromLeftRight (force fnResult)))))))))
+            ; else push the new value onto the stack
+
+; ###############
+; #### EVAL #####
+; ###############
+
+(define (x-symbol? char)
+  (lambda (symb)
+    (and (symbol? symb) 
+         (let ((symb-str (symbol->string symb)))
+           (and (> (string-length symb-str) 1) ; '& is not a legal static symbol
+                (eq? char (string-ref symb-str 0)))))))
+
+(define (x-symbol->symbol test err)
+  (lambda (symb)
+    (if (not (test symb))
+      (raise err)
+      (let ((symb-str (symbol->string symb)))
+        (string->symbol (substring symb-str 1 (string-length symb-str)))))))
+
+(define static-symbol? (x-symbol? #\&))
+(define static-symbol->symbol (x-symbol->symbol static-symbol? "not a static symbol"))
+
+(define (mkStaticSymbolElm symb env)
+  (list '& symb env))
+
+(define (mkAutoSymbolElm symb)
+  (list '@ symb))
+
+(define (mkPosnRefElm n)
+  (list '! n))
+
+(define auto-symbol? (x-symbol? #\@))
+(define auto-symbol->symbol (x-symbol->symbol auto-symbol? "not an auto symbol"))
+
+(define (lviv-eval state item)
+  (cond ((static-symbol? item) ; static symbols get pushed with their environmental binding
+         (stStackPush 
+           state 
+           (mkStaticSymbolElm (static-symbol->symbol item)
+                              (stGetEnv state))))
+        ((auto-symbol? item) ; auto symbols have no environmental binding
+         (stStackPush 
+           state 
+           (mkAutoSymbolElm (auto-symbol->symbol item))))
+        ((eq? item 'nop) (eRight '())) ; nop does nothing
+        ((stStackOp? item) ((stStackOp? item) state))
+        ((symbol? item) ; symbol : look it up
+         (let* ((iLBind (stEnvLookupBinding state item))
+                (iBind (fromLeftRight iLBind)))
+           (cond ((eLeft? iLBind) ; not found? push it on as an auto symbol
+                  (stStackPush state (mkAutoSymbolElm item)))
+                 ((primitive? iBind) (stPrimCall state iBind)) ; prim: execute
+                 (else (stStackPush state iBind))))) ; push onto stack
+        (else (stStackPush state item)))) ; else just push it on the stack
+
+(define (lviv-repl state input)
+  (if (eq? input '#!eof)
+    #f
+    (begin 
+      (if (string? input)
+        (map (lambda (x) (lviv-eval state x))
+             (call-with-input-string input read-all)))
+      (lviv-ppstack (stGetStack state) (stEnvLookupBinding state '_stack_display_depth))
+      (display "> ")
+      (lviv-repl state (read-line)))))
+
+(define _stack_display_depth 10)
+
+(define (lviv-ppstack stack eDepth)
+  (let ((depth (if (and (eRight? eDepth) (exact? (fromLeftRight eDepth)))
+                 (fromLeftRight eDepth)
+                 _stack_display_depth)))
+    (map pp (reverse (take depth stack)))))
 
 ; ###############
 ; #### TESTS ####
 ; ###############
 
+(define (test x msg)
+  (or x (raise msg)))
+
+(define (testLookup x val)
+    (test (and (eRight? (stEnvLookupBinding myState x))
+               (equal? (fromLeftRight (stEnvLookupBinding myState x)) val))
+          (string-append (symbol->string x) " lookup failed")))
+
+(define (testStack val msg)
+  (test (equal? (stGetStack myState) val) msg))
+
 (define myState (mkEmptyState))
+
 (stStackPush myState 1)
 (stStackPush myState 2)
 (stStackPush myState 3)
 (stStackPush myState 4)
 (stStackPush myState 5)
 (stStackPush myState 2)
+(testStack '(2 5 4 3 2 1) "push tests failed")
 
-(stEnvUpdateBinding myState '(a 1))
-(stEnvUpdateBinding myState '(b 2))
-(stEnvUpdateBinding myState '(c 3))
-(stEnvUpdateBinding myState '(d 4))
-(stEnvUpdateBinding myState '(e 5))
-(stEnvUpdateBinding myState '(a 6))
+(stStackSwap myState)
+(testStack '(5 2 4 3 2 1) "swap test failed")
+
+(stStackDrop myState)
+(testStack '(2 4 3 2 1) "drop test failed")
+
+(stStackDropN myState)
+(testStack '(2 1) "dropN test failed")
+
+(stStackClear myState)
+(testStack '() "clear test failed")
+
+(stStackPush myState 1)
+(stStackPush myState 2)
+(stStackPush myState 3)
+(stStackPush myState 4)
+(stStackPush myState 5)
+(stStackRollN myState)
+(testStack '(5 4 3 2 1) "opN not enough args test failed")
+(stStackPush myState 3)
+(stStackRollN myState)
+(testStack '(3 5 4 2 1) "rollN test failed")
+
+(stStackPush myState 2)
+(stStackUnrollN myState)
+(testStack '(5 3 4 2 1) "unrollN test failed")
+
+(stStackDup myState)
+(testStack '(5 5 3 4 2 1) "dup test failed")
+
+(stStackPush myState 3)
+(stStackDupN myState)
+(testStack '(5 5 3 5 5 3 4 2 1) "dupN test failed")
+
+(stStackPush myState 'a)
+(stStackDupN myState)
+(testStack '(a 5 5 3 5 5 3 4 2 1) "opN non-numeric test failed")
+
+(stStackOver myState)
+(testStack '(5 a 5 5 3 5 5 3 4 2 1) "over test failed")
+
+(stStackPush myState '5)
+(stStackPickN myState)
+(testStack '(3 5 a 5 5 3 5 5 3 4 2 1) "pickN test failed")
+
+(stPrimCall myState (mkPrimBinding '+ 2))
+(testStack '(8 a 5 5 3 5 5 3 4 2 1) "hidden primitive test failed")
+
+(stStackDropN myState)
+(testStack '(2 1) "dropN test failed")
+
+(stStackPush myState '#t)
+(stStackDropUnless myState)
+(testStack '(2 1) "#t dropUnless test failed")
+
+(stStackPush myState '#f)
+(stStackDropUnless myState)
+(testStack '(1) "#f dropUnless test failed")
+
+(stStackPush myState 5)
+(stStackDropUnless myState)
+(testStack '(5 1) "non-bool dropUnless test failed")
+
+(stStackPush myState #f)
+(stStackDropIf myState)
+(testStack '(5 1) "#f dropIf test failed")
+
+(stStackPush myState #t)
+(stStackDropIf myState)
+(testStack '(1) "#t dropIf test failed")
+
+(stStackDropIf myState)
+(testStack '(1) "non-bool dropIf test failed")
+
+(stStackPush myState 5)
+(stStackPush myState #t)
+(stStackSwapIf myState)
+(testStack '(1 5) "#t swapIf test failed")
+
+(stStackPush myState 5)
+(stStackPush myState #f)
+(stStackSwapIf myState)
+(testStack '(5 1 5) "#f swapIf test failed")
+
+(stStackSwapIf myState)
+(testStack '(5 1 5) "non-bool swapIf test failed")
+
+(stStackPush myState #f)
+(stStackPush myState #t)
+(stStackSwapUnless myState)
+(testStack '(#f 5 1 5) "#t swapUnless test failed")
+
+(stStackSwapUnless myState)
+(testStack '(1 5 5) "#f swapUnless test failed")
+
+(stStackSwapUnless myState)
+(testStack '(1 5 5) "non-bool swapUnless test failed")
+
+(stEnvUpdateBinding myState '(a . 1))
+(stEnvUpdateBinding myState '(b . 2))
+(stEnvUpdateBinding myState '(c . 3))
+(stEnvUpdateBinding myState '(d . 4))
+(stEnvUpdateBinding myState '(e . 5))
+(stEnvUpdateBinding myState '(a . 6))
 (stEnvDelBinding myState 'd)
+
+(test (eLeft? (stEnvLookupBinding myState 'd)) "d still bound!?")
+(testLookup 'e 5)
 
 (stEnvNewChild myState)
 (stEnvUpdateBinding myState '(f 100))
 (stEnvUpdateBinding myState '(b 200))
+
+(testLookup 'e 5)
+(testLookup 'f '(100))
+(testLookup 'b '(200))
+(test (eLeft? (stEnvLookupBinding myState 'd)) "d still bound!? (2)")
 
 (display (stEnvLookupBinding myState 'c)) (newline)
 (display (stEnvLookupBinding myState 'd)) (newline)
@@ -454,16 +718,37 @@
 (stEnvParent myState)
 (display myState) (newline)
 
+(test (stGlobalEnv? myState) "should be global env here")
+
 (stEnvNewChild myState)
 (stEnvUpdateBinding myState '(f 100))
 (stEnvUpdateBinding myState '(b 200))
+
+(test (not (stGlobalEnv? myState)) "should not be global env here")
+
+(stEnvParent myState)
+(stEnvParent myState)
+(test (stGlobalEnv? myState) "should be global env here")
+
 (stEnvUpdateBinding myState (cons '+ (mkPrimBinding '+ 2)))
+(stEnvUpdateBinding myState (cons '* (mkPrimBinding '* 2)))
 (stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
+(stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
 (stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
 (stEnvUpdateBinding myState (cons 'car (mkPrimBinding 'car 1)))
 (stEnvUpdateBinding myState (cons 'cdr (mkPrimBinding 'cdr 1)))
 
-(stStackPush myState '+)
+(stPrimCall myState (fromLeftRight (stEnvLookupBinding myState '+)))
+
+(test (equal? (stGetStack myState) '(6 5)) "state of stack is wrong after +")
+
+(stStackNPush myState '(a b))
+
+(test (eLeft? (stPrimCall myState (fromLeftRight (stEnvLookupBinding myState '+)))) "call to + failed to fail")
+(test (equal? (stGetStack myState) '(a b 6 5)) "stack is in wrong state after type failure")
+(testLookup 'cdr (mkPrimBinding 'cdr 1))
 
 (display myState) (newline)
+
+(lviv-repl myState #f)
 
