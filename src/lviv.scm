@@ -1,7 +1,24 @@
-
-;#lang r5rs
-; Except that somehow DrRacket's implementation is case sensitive and stuff
-
+;
+;Copyright (c) 2011 Riad S. Wahby <rsw@jfet.org>
+;
+;Permission is hereby granted, free of charge, to any person obtaining a copy
+;of this software and associated documentation files (the "Software"), to deal
+;in the Software without restriction, including without limitation the rights
+;to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+;copies of the Software, and to permit persons to whom the Software is
+;furnished to do so, subject to the following conditions:
+;
+;The above copyright notice and this permission notice shall be included in
+;all copies or substantial portions of the Software.
+;
+;THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+;THE SOFTWARE.
+;
 ; **************
 ; **** MISC ****
 ; **************
@@ -81,20 +98,8 @@
 ; retrieve env from the state
 (define stGetEnv cdr)
 
-; retrieve bindings from the env
-(define stGetBindings cadr)
-(define envGetBindings car)
-
-; retrieve enclsure from the env
-(define stGetEnclosure cddr)
-(define envGetEnclosure cdr)
-
-; is this the global environment?
-(define (global? env) (eq? (envGetEnclosure env) '()))
-
 ; update environment
 (define (stUpdateEnv oldState newEnv) (set-cdr! oldState newEnv))
-; update stack
 (define (stUpdateStack oldState newStack) (set-car! oldState newStack))
 
 ; ***************
@@ -125,6 +130,12 @@
 (define (stStackPush state var) 
   (stStackUpd (stackPush var) state))
 
+; push a list of values back onto the stack
+(define (stackNPush var)
+  (lambda (stack) (append var stack)))
+(define (stStackNPush state var)
+  (stStackUpd (stackNPush var) state))
+
 ; stack depth
 (define depth length)
 (define (stStackDepth state) (depth (stGetStack state)))
@@ -136,8 +147,23 @@
 (define (stackPop stack)
   (if (> (depth stack) 0)
     (cons (eRight (car stack)) (cdr stack))
-    (cons (eLeft "pop: stack empty") stack)))
+    (cons (eLeft "pop: stack empty") '())))
+
 (define (stStackPop state) (stStackUpd2 stackPop state))
+
+; pop n items off stack
+; this is used when executing functions
+(define (stackPopN n)
+  (lambda (stack)
+    (if (<= (depth stack) n)
+      (cons (eLeft "popN: not enough arguments") '())
+      (letrec ((sPopNHlp
+                 (lambda (stack accum n)
+                   (if (= n 0)
+                     (cons (eRight (reverse accum)) stack)
+                     (sPopNHlp (cdr stack) (cons (car stack) accum) (- n 1))))))
+        (sPopNHlp stack '() n)))))
+(define (stStackNPop state n) (stStackUpd2 (stackPopN n) state))
 
 ; swap the 0th and 1st elements of the stack
 (define (stackSwap stack)
@@ -150,7 +176,7 @@
 (define (stackDrop stack)
   (if (> (depth stack) 0)
     (cons (eRight '()) (cdr stack))
-    (cons (eLeft "drop: stack empty") stack)))
+    (cons (eLeft "drop: stack empty") '())))
 (define (stStackDrop state) (stStackUpd2 stackDrop state))
 
 ; clear the stack, i.e., replace it with emptyState
@@ -190,7 +216,7 @@
 (define (stackDup stack)
   (if (> (depth stack) 0)
     (cons (eRight '()) (cons (car stack) stack))
-    (cons (eLeft "dup: stack empty") stack)))
+    (cons (eLeft "dup: stack empty") '())))
 (define (stStackDup state) (stStackUpd2 stackDup state))
 
 ; dup the first N elements after the 0th
@@ -243,6 +269,156 @@
   (stackOpBool #f stackDrop))
 (define (stStackDropUnless state) (stStackUpd2 stackDropUnless state))
 
+; #############
+; #### ENV #### 
+; #############
+
+; env bindings
+(define envBindings car)
+(define envFirstBinding caar)
+(define envRemBindings cdar)
+(define envSetBindings set-car!)
+(define firstBinding car)
+(define restBindings cdr)
+(define rRestBindings cddr)
+(define setRestBindings set-cdr!)
+; get env parent
+(define envParent cdr)
+; no updateParent necessary, we never rebase an env
+
+; is this the global env?
+(define (stGlobalEnv? state) (null? (envParent (stGetEnv state))))
+
+; make a new child env from the parent
+(define (envNewChild env) (cons '() env))
+(define (stEnvNewChild state) (stUpdateEnv state (envNewChild (stGetEnv state))))
+
+(define (stEnvParent state)
+  (if (not (stGlobalEnv? state))
+    (stUpdateEnv state (envParent (stGetEnv state)))))
+
+; convert an envBinding operation to a stEnvBinding operation
+(define (stEnvBindOp f)
+  (lambda (state item) (f (stGetEnv state) item)))
+
+; delete binding from env
+(define (envDelBinding env name)
+  (letrec ((delHlp
+             (lambda (bindings)
+               (cond ((null? (restBindings bindings)) #f)
+                     ((eq? name (car (firstBinding (restBindings bindings))))
+                      (setRestBindings bindings (rRestBindings bindings)))
+                     (else (delHlp (restBindings bindings)))))))
+    (cond ((null? (envBindings env)) #f)
+          ((eq? name (car (firstBinding (envBindings env))))
+           (envSetBindings env (restBindings (envBindings env))))
+          (else (delHlp (envBindings env))))))
+(define stEnvDelBinding (stEnvBindOp envDelBinding))
+
+; insert an item into the environment
+; does not check whether item is already there
+(define (envAddBinding env item)
+  (envSetBindings env (cons item (envBindings env))))
+
+; update or insert binding into env
+(define (envUpdateBinding env item)
+  (letrec ((updateHlp
+             (lambda (bindings) 
+               (cond ((null? bindings) (envAddBinding env item))
+                     ((eq? (car item) (car (firstBinding bindings)))
+                      (set-cdr! (firstBinding bindings) (cdr item)))
+                     (else (updateHlp (restBindings bindings)))))))
+    (updateHlp (envBindings env))))
+(define stEnvUpdateBinding (stEnvBindOp envUpdateBinding))
+
+(define (envLookupBinding env name)
+  (if (null? env)
+    (eLeft "not found")
+    (letrec ((lookupHlp
+               (lambda (bindings)
+                 (cond ((null? bindings) (envLookupBinding (envParent env) name))
+                       ((eq? name (car (firstBinding bindings)))
+                        (eRight (cdr (firstBinding bindings))))
+                       (else (lookupHlp (restBindings bindings)))))))
+      (lookupHlp (envBindings env)))))
+(define stEnvLookupBinding (stEnvBindOp envLookupBinding))
+
+; ###########################
+; #### EXCEPTION HANDLER ####
+; ###########################
+; we want to provide reasonable exceptions to the user, so we do our best
+; to catch what's coming from the interpreter and turn it into something
+; intelligible
+(define (exceptionHandler exc)
+  (cond ((noncontinuable-exception? exc) (eLeft (noncontinuable-exception-reason exc)))
+        ((heap-overflow-exception? exc) (eLeft "heap overflow"))
+        ((stack-overflow-exception? exc) (eLeft "call stack overflow"))
+        ((os-exception? exc) (eLeft (os-exception-message exc)))
+        ((no-such-file-or-directory-exception? exc) (eLeft "no such file or directory"))
+        ((unbound-os-environment-variable-exception? exc) (eLeft "unbound env variable"))
+        ((scheduler-exception? exc) (eLeft "scheduler exception"))
+        ((deadlock-exception? exc) (eLeft "deadlock exception"))
+        ((abandoned-mutex-exception? exc) (eLeft "abandoned mutex"))
+        ((join-timeout-exception? exc) (eLeft "join timeout"))
+        ((started-thread-exception? exc) (eLeft "thread started"))
+        ((terminated-thread-exception? exc) (eLeft "thread terminated"))
+        ((uncaught-exception? exc) (eLeft "uncaught exception"))
+        ((cfun-conversion-exception? exc) (eLeft "C function exception"))
+        ((sfun-conversion-exception? exc) (eLeft "Sfun exception"))
+        ((multiple-c-return-exception? exc) (eLeft "multiple C return"))
+        ((datum-parsing-exception? exc) (eLeft "bad read"))
+        ((expression-parsing-exception? exc) (eLeft "bad parse"))
+        ((unbound-global-exception? exc) (eLeft "unbound global exception"))
+        ((type-exception? exc) (eLeft "type exception"))
+        ((range-exception? exc) (eLeft "range exception"))
+        ((improper-length-list-exception? exc) (eLeft "improper length list"))
+        ((wrong-number-of-arguments-exception? exc) (eLeft "wrong number of arguments"))
+        ((number-of-arguments-limit-exception? exc) (eLeft "number of arguments limit"))
+        ((nonprocedure-operator-exception? exc) (eLeft "nonprocedure operator"))
+        ((unknown-keyword-argument-exception? exc) (eLeft "unknown keyword argument"))
+        ((keyword-expected-exception? exc) (eLeft "keyword expected"))
+        ((error-exception? exc) (eLeft (string-append "error: " (error-exception-message exc))))
+        ((divide-by-zero-exception? exc) (eLeft "divide by zero"))
+        (else (eLeft "unknown exception"))))
+
+; ########################
+; #### FUNCTION CALLS ####
+; ########################
+
+; make a primitive binding to stick in the env
+(define (mkPrimBinding id arity)
+  (list 'primitive arity id))
+
+; primitives
+(define primitive-arity cadr)
+(define primitive-id caddr)
+(define (primitive? obj)
+  (and (list? obj) (eq? (car obj) 'primitive) (= (length obj) 3)))
+
+; primitive call
+(define (stPrimCall state)
+  (let* ((fName (stStackPop state))
+         (fBinding (delay (stEnvLookupBinding state (fromLeftRight fName))))
+         (fnNArgs (delay (primitive-arity (fromLeftRight (force fBinding)))))
+         (fnArgs (delay (stStackNPop state (force fnNArgs))))
+         (fnCompResult
+           (lambda ()
+             (eRight (apply (eval (primitive-id (fromLeftRight (force fBinding))))
+                            (fromLeftRight (force fnArgs))))))
+         (fnResult (delay (with-exception-catcher exceptionHandler fnCompResult))))
+    (cond ((eLeft? fName) fName)
+          ((eLeft? (force fBinding)) 
+           (begin (stStackPush state (fromLeftRight fName))
+                  (force fBinding)))
+          ((not (primitive? (fromLeftRight (force fBinding))))
+           (begin (stStackPush state (fromLeftRight fName))
+                  (eLeft "not a primitive procedure")))
+          ((eLeft? (force fnArgs)) (force fnArgs))
+          ((eLeft? (force fnResult))
+           (begin (stStackNPush state (fromLeftRight (force fnArgs)))
+                  (force fnResult)))
+          (else (stStackPush state (fromLeftRight (force fnResult)))))))
+
 ; ###############
 ; #### TESTS ####
 ; ###############
@@ -254,5 +430,40 @@
 (stStackPush myState 4)
 (stStackPush myState 5)
 (stStackPush myState 2)
+
+(stEnvUpdateBinding myState '(a 1))
+(stEnvUpdateBinding myState '(b 2))
+(stEnvUpdateBinding myState '(c 3))
+(stEnvUpdateBinding myState '(d 4))
+(stEnvUpdateBinding myState '(e 5))
+(stEnvUpdateBinding myState '(a 6))
+(stEnvDelBinding myState 'd)
+
+(stEnvNewChild myState)
+(stEnvUpdateBinding myState '(f 100))
+(stEnvUpdateBinding myState '(b 200))
+
+(display (stEnvLookupBinding myState 'c)) (newline)
+(display (stEnvLookupBinding myState 'd)) (newline)
+(display (stEnvLookupBinding myState 'b)) (newline)
+
+(display myState) (newline)
+(stEnvParent myState)
+(stEnvParent myState)
+(stEnvParent myState)
+(stEnvParent myState)
+(display myState) (newline)
+
+(stEnvNewChild myState)
+(stEnvUpdateBinding myState '(f 100))
+(stEnvUpdateBinding myState '(b 200))
+(stEnvUpdateBinding myState (cons '+ (mkPrimBinding '+ 2)))
+(stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
+(stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
+(stEnvUpdateBinding myState (cons 'car (mkPrimBinding 'car 1)))
+(stEnvUpdateBinding myState (cons 'cdr (mkPrimBinding 'cdr 1)))
+
+(stStackPush myState '+)
+
 (display myState) (newline)
 
