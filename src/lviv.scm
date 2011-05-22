@@ -409,7 +409,6 @@
          (envItem
            (delay (cons fnId
                         (fromLeftRight (force fnVal))))))
-    (with-exception-catcher exceptionHandler (lambda ()
     (cond ((eLeft? fnIdE) fnIdE)
           ((not (or (static-symbol-elm? fnId) (symbol? fnId) (auto-symbol-elm? fnId)))
            (rewind state (list fnId) "invalid identifier"))
@@ -422,7 +421,7 @@
           ((auto-symbol-elm? fnId)
            (eRight (stEnvUpdateBinding myState (force saEnvItem))))
           (else
-           (eRight (stEnvUpdateBinding myState (force envItem)))))))))
+           (eRight (stEnvUpdateBinding myState (force envItem)))))))
 
 ; ############################
 ; #### EXCEPTION HANDLING ####
@@ -442,10 +441,17 @@
 (define (stackError? exc)
   (and (list? exc) (eq? (car exc) 'stackError) (= (length exc) 2)))
 
+(define (dispErr_ msg)
+  (let ((errMsg (string-append "--> error: " msg "\n")))
+    (display errMsg)
+    (eLeft msg)))
+
 ; we want to provide reasonable exceptions to the user, so we do our best
 ; to catch what's coming from the interpreter and turn it into something
 ; intelligible
-(define (exceptionHandler exc)
+(define (exceptionHandler display?)
+  (lambda (exc)
+  (let ((dispErr (if display? dispErr_ eLeft)))
   (cond ((rewind? exc)
          (let ((state (cadr exc))
                (stackArgs (caddr exc))
@@ -454,40 +460,74 @@
            (eLeft msg)))
         ((stackError? exc)
          (display (string-append "--> error: " (cadr exc)))
-         (newline))
-        ((noncontinuable-exception? exc) (eLeft (noncontinuable-exception-reason exc)))
-        ((heap-overflow-exception? exc) (eLeft "heap overflow"))
-        ((stack-overflow-exception? exc) (eLeft "call stack overflow"))
-        ((os-exception? exc) (eLeft (os-exception-message exc)))
-        ((no-such-file-or-directory-exception? exc) (eLeft "no such file or directory"))
-        ((unbound-os-environment-variable-exception? exc) (eLeft "unbound env variable"))
-        ((scheduler-exception? exc) (eLeft "scheduler exception"))
-        ((deadlock-exception? exc) (eLeft "deadlock exception"))
-        ((abandoned-mutex-exception? exc) (eLeft "abandoned mutex"))
-        ((join-timeout-exception? exc) (eLeft "join timeout"))
-        ((started-thread-exception? exc) (eLeft "thread started"))
-        ((terminated-thread-exception? exc) (eLeft "thread terminated"))
-        ((uncaught-exception? exc) (eLeft "uncaught exception"))
-        ((cfun-conversion-exception? exc) (eLeft "C function exception"))
-        ((sfun-conversion-exception? exc) (eLeft "Sfun exception"))
-        ((multiple-c-return-exception? exc) (eLeft "multiple C return"))
-        ((datum-parsing-exception? exc) (eLeft "bad read"))
-        ((expression-parsing-exception? exc) (eLeft "bad parse"))
-        ((unbound-global-exception? exc) (eLeft (string-append
-                                                  "unbound global exception: "
-                                                  (symbol->string
-                                                    (unbound-global-exception-variable exc)))))
-        ((type-exception? exc) (eLeft "type exception"))
-        ((range-exception? exc) (eLeft "range exception"))
-        ((improper-length-list-exception? exc) (eLeft "improper length list"))
-        ((wrong-number-of-arguments-exception? exc) (eLeft "wrong number of arguments"))
-        ((number-of-arguments-limit-exception? exc) (eLeft "number of arguments limit"))
-        ((nonprocedure-operator-exception? exc) (eLeft "nonprocedure operator"))
-        ((unknown-keyword-argument-exception? exc) (eLeft "unknown keyword argument"))
-        ((keyword-expected-exception? exc) (eLeft "keyword expected"))
-        ((error-exception? exc) (eLeft (string-append "error: " (error-exception-message exc))))
-        ((divide-by-zero-exception? exc) (eLeft "divide by zero"))
-        (else (eLeft "unknown exception"))))
+         (newline)
+         (eLeft (cadr exc)))
+        ((noncontinuable-exception? exc)
+         (dispErr (noncontinuable-exception-reason exc)))
+        ((heap-overflow-exception? exc)
+         (dispErr "heap overflow"))
+        ((stack-overflow-exception? exc)
+         (dispErr "call stack overflow"))
+        ((os-exception? exc)
+         (dispErr (os-exception-message exc)))
+        ((no-such-file-or-directory-exception? exc)
+         (dispErr "no such file or directory"))
+        ((unbound-os-environment-variable-exception? exc)
+         (dispErr "unbound env variable"))
+        ((scheduler-exception? exc)
+         (dispErr "scheduler exception"))
+        ((deadlock-exception? exc)
+         (dispErr "deadlock exception"))
+        ((abandoned-mutex-exception? exc)
+         (dispErr "abandoned mutex"))
+        ((join-timeout-exception? exc)
+         (dispErr "join timeout"))
+        ((started-thread-exception? exc)
+         (dispErr "thread started"))
+        ((terminated-thread-exception? exc)
+         (dispErr "thread terminated"))
+        ((uncaught-exception? exc)
+         (dispErr "uncaught exception"))
+        ((cfun-conversion-exception? exc)
+         (dispErr "C function exception"))
+        ((sfun-conversion-exception? exc)
+         (dispErr "Sfun exception"))
+        ((multiple-c-return-exception? exc)
+         (dispErr "multiple C return"))
+        ((datum-parsing-exception? exc)
+         (dispErr "bad read"))
+        ((expression-parsing-exception? exc)
+         (dispErr "bad parse"))
+        ((unbound-global-exception? exc) 
+         (dispErr (string-append
+                  "unbound global exception: "
+                  (symbol->string
+                    (unbound-global-exception-variable exc)))))
+        ((type-exception? exc)
+         (dispErr "type exception"))
+        ((range-exception? exc)
+         (dispErr "range exception"))
+        ((improper-length-list-exception? exc)
+         (dispErr "improper length list"))
+        ((wrong-number-of-arguments-exception? exc)
+         (dispErr "wrong number of arguments"))
+        ((number-of-arguments-limit-exception? exc)
+         (dispErr "number of arguments limit"))
+        ((nonprocedure-operator-exception? exc)
+         (dispErr "nonprocedure operator"))
+        ((unknown-keyword-argument-exception? exc)
+         (dispErr "unknown keyword argument"))
+        ((keyword-expected-exception? exc)
+         (dispErr "keyword expected"))
+        ((error-exception? exc)
+         (dispErr (string-append "error: " 
+                                 (if (string? (error-exception-message exc))
+                                   (error-exception-message exc)
+                                   "error exception raised"))))
+        ((divide-by-zero-exception? exc)
+         (dispErr "divide by zero"))
+        (else
+          (dispErr "unknown exception"))))))
 
 ; ########################
 ; #### FUNCTION CALLS ####
@@ -511,8 +551,9 @@
            (lambda ()
              (eRight (apply (eval (primitive-id binding))
                             (fromLeftRight (force fnArgs))))))
-         (fnResult (delay (with-exception-catcher exceptionHandler fnCompResult))))
-    (with-exception-catcher exceptionHandler (lambda ()
+         (fnResult (delay (with-exception-catcher 
+                            (exceptionHandler #t)
+                            fnCompResult))))
     (cond ((eLeft? (force fnArgs)) (force fnArgs))
             ; if there aren't enough args, the procedure fails
             ; and the stack doesn't get rewound any further
@@ -524,7 +565,7 @@
                    (force fnResult)))
             ; if the primitive application fails, put the args
             ; back on the stack
-          (else (stStackPush state (fromLeftRight (force fnResult)))))))))
+          (else (stStackPush state (fromLeftRight (force fnResult)))))))
             ; else push the new value onto the stack
 
 ; ###############
@@ -575,35 +616,50 @@
 (define quote-symbol->symbol (x-symbol->symbol quote-symbol? "not a quote symbol"))
 (define quote-symbol-elm? symbol?)
 
+(define (symbol-elm? item) (or (static-symbol-elm? item)
+                               (posn-symbol-elm? item)
+                               (auto-symbol-elm? item)
+                               (quote-symbol-elm? item)))
+
+(define (mkStackOpElm op) (cons 'stackop op))
+(define (stackOpElm? op)
+  (and (pair? op) (eq? 'stackop (car op)) (procedure? (cdr op))))
+(define stackOpElm->stackop cdr)
+
 (define (lviv-eval state item)
+  (cond ((eq? item 'nop) item) ; nop is same in the AST
+        ((eq? item 'env) item) ; env is same in the AST
+        ((static-symbol? item) ; &foo -> (& foo env)
+         (mkStaticSymbolElm (static-symbol->symbol item)
+                            (stGetEnv state)))
+        ((auto-symbol? item)   ; @foo -> (@ foo)
+         (mkAutoSymbolElm (auto-symbol->symbol item)))
+        ((posn-symbol? item)   ; !1   -> (! 1)
+         (mkPosnRefElm (posn-symbol->symbol item)))
+        ((quote-symbol? item)  ; *bar -> bar
+         (quote-symbol->symbol item))
+        ((stStackOp? item) (mkStackOpElm (stStackOp? item))) ; primitive stack op
+        ((symbol? item)        ; look up symbol in present env
+         (let ((iLBind (stEnvLookupBinding state item)))
+           (if (eLeft? iLBind) ; did lookup succeed?
+             (mkAutoSymbolElm item) ; no---make auto symbol
+             (fromLeftRight iLBind)))) ; yes---pass it on
+        ((list? item)
+         (map (lambda (x) (lviv-eval state x)) item))
+        ((pair? item)
+         (cons (lviv-eval state (car item))
+               (lviv-eval state (cdr item))))
+        (else item)))
+
+(define (lviv-apply state item)
   ((lambda (result) (if (eLeft? result) (stackError result) result))
   (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
         ((eq? item 'env) ; env will show the present environment
-         (pp (stGetEnv state))
-         (newline))
-        ((static-symbol? item) ; static symbols get pushed with their environmental binding
-         (stStackPush 
-           state 
-           (mkStaticSymbolElm (static-symbol->symbol item)
-                              (stGetEnv state))))
-        ((auto-symbol? item) ; auto symbols have no environmental binding
-         (stStackPush 
-           state 
-           (mkAutoSymbolElm (auto-symbol->symbol item))))
-        ((posn-symbol? item)
-         (stStackPush
-           state
-           (mkPosnRefElm (posn-symbol->symbol item))))
-        ;((stEnvOp? item) ((stEnvOp? item) state))
-        ((stStackOp? item) ((stStackOp? item) state))
-        ((quote-symbol? item) (stStackPush state (quote-symbol->symbol item)))
-        ((symbol? item) ; symbol : look it up
-         (let* ((iLBind (stEnvLookupBinding state item))
-                (iBind (fromLeftRight iLBind)))
-           (cond ((eLeft? iLBind) ; not found? push it on as an auto symbol
-                  (stStackPush state (mkAutoSymbolElm item)))
-                 ((primitive? iBind) (stPrimCall state iBind)) ; prim: execute
-                 (else (stStackPush state iBind))))) ; push onto stack
+         (eRight (pp (stGetEnv state)) (newline)))
+        ((symbol-elm? item)
+         (stStackPush state item))
+        ((stackOpElm? item) ((stackOpElm->stackop item) state))
+        ((primitive? item) (stPrimCall state item))
         (else (stStackPush state item))))) ; else just push it on the stack
 
 (define (lviv-repl state input)
@@ -611,8 +667,8 @@
     #f
     (begin 
       (if (string? input)
-        (with-exception-catcher exceptionHandler (lambda ()
-        (map (lambda (x) (lviv-eval state x))
+        (with-exception-catcher (exceptionHandler #t) (lambda ()
+        (map (lambda (x) (lviv-apply state (lviv-eval state x)))
              (call-with-input-string input read-all)))))
       (lviv-ppstack (stGetStack state) (stEnvLookupBinding state '_stack_display_depth))
       (display "> ")
@@ -656,7 +712,8 @@
                    (acHlp (+ cnt 1)))))))
     (acHlp 0)))
 
-(add-cxrs myState 5)
+;(add-cxrs myState 5)
+;only defined up to 4 levels, not 5 as I'd previously believed
 (add-cxrs myState 4)
 (add-cxrs myState 3)
 (add-cxrs myState 2)
@@ -827,16 +884,20 @@
 (stEnvParent myState)
 (test (stGlobalEnv? myState) "should be global env here")
 
-(stPrimCall myState (fromLeftRight (stEnvLookupBinding myState '+)))
+(lviv-apply myState (lviv-eval myState '+))
 
 (test (equal? (stGetStack myState) '(6 5)) "state of stack is wrong after +")
 
-(lviv-eval myState '@b)
-(lviv-eval myState '@a)
+(lviv-apply myState (lviv-eval myState '@b))
+(lviv-apply myState (lviv-eval myState '@a))
 (display myState) (newline)
 
-(test (eLeft? (stPrimCall myState (fromLeftRight (stEnvLookupBinding myState '+)))) "call to + failed to fail")
-(test (equal? (stGetStack myState) '((@ a) (@ b) 6 5)) "stack is in wrong state after type failure")
+(test (eLeft? 
+        (with-exception-catcher (exceptionHandler #f)
+         (lambda () (stPrimCall myState (lviv-eval myState '+)))))
+        "call to + failed to fail")
+(test (equal? (stGetStack myState) '((@ a) (@ b) 6 5))
+      "stack is in wrong state after type failure")
 (testLookup 'cdr (mkPrimBinding 'cdr 1))
 
 (display myState) (newline)
