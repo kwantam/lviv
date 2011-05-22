@@ -571,6 +571,10 @@
   (list '@ symb))
 (define auto-symbol-elm? (x-symbol-elm? '@ 2))
 
+(define quote-symbol? (x-symbol? #\*))
+(define quote-symbol->symbol (x-symbol->symbol quote-symbol? "not a quote symbol"))
+(define quote-symbol-elm? symbol?)
+
 (define (lviv-eval state item)
   ((lambda (result) (if (eLeft? result) (stackError result) result))
   (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
@@ -592,6 +596,7 @@
            (mkPosnRefElm (posn-symbol->symbol item))))
         ;((stEnvOp? item) ((stEnvOp? item) state))
         ((stStackOp? item) ((stStackOp? item) state))
+        ((quote-symbol? item) (stStackPush state (quote-symbol->symbol item)))
         ((symbol? item) ; symbol : look it up
          (let* ((iLBind (stEnvLookupBinding state item))
                 (iBind (fromLeftRight iLBind)))
@@ -621,6 +626,43 @@
                  _stack_display_depth)))
     (map pp (reverse (take depth stack)))))
 
+; #################
+; #### PRELUDE ####
+; #################
+
+(define myState (mkEmptyState))
+
+(stEnvUpdateBinding myState (cons '+ (mkPrimBinding '+ 2)))
+(stEnvUpdateBinding myState (cons '* (mkPrimBinding '* 2)))
+(stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
+(stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
+(stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
+
+(define (add-cxrs state n)
+  (letrec ((nums (take n '(1 2 4 8 16)))
+           (bitAD
+             (lambda (cnt)
+               (apply string-append
+                 (map (lambda (x)
+                        (if (= (modulo (quotient cnt x) 2) 0) "a" "d"))
+                      nums))))
+           (acHlp
+             (lambda (cnt) 
+               (if (= (expt 2 n) cnt) #t
+                 (let ((nxName (string->symbol (string-append "c" (bitAD cnt) "r"))))
+                   (stEnvUpdateBinding state
+                                       (cons nxName
+                                             (mkPrimBinding nxName 1)))
+                   (acHlp (+ cnt 1)))))))
+    (acHlp 0)))
+
+(add-cxrs myState 5)
+(add-cxrs myState 4)
+(add-cxrs myState 3)
+(add-cxrs myState 2)
+(add-cxrs myState 1)
+
+
 ; ###############
 ; #### TESTS ####
 ; ###############
@@ -635,8 +677,6 @@
 
 (define (testStack val msg)
   (test (equal? (stGetStack myState) val) msg))
-
-(define myState (mkEmptyState))
 
 (stStackPush myState 1)
 (stStackPush myState 2)
@@ -786,14 +826,6 @@
 (stEnvParent myState)
 (stEnvParent myState)
 (test (stGlobalEnv? myState) "should be global env here")
-
-(stEnvUpdateBinding myState (cons '+ (mkPrimBinding '+ 2)))
-(stEnvUpdateBinding myState (cons '* (mkPrimBinding '* 2)))
-(stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
-(stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
-(stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
-(stEnvUpdateBinding myState (cons 'car (mkPrimBinding 'car 1)))
-(stEnvUpdateBinding myState (cons 'cdr (mkPrimBinding 'cdr 1)))
 
 (stPrimCall myState (fromLeftRight (stEnvLookupBinding myState '+)))
 
