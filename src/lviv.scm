@@ -322,7 +322,8 @@
       ((stackOp? 'swapUnless stStackSwapUnless) op)
       ((stackOp? 'dropIf stStackDropIf) op)
       ((stackOp? 'dropUnless stStackDropUnless) op)
-      ((stackOp? 'uncons stStackUncons) op)))
+      ((stackOp? 'uncons stStackUncons) op)
+      ((stackOp? 'define stDefine) op)))
 
 ; #############
 ; #### ENV #### 
@@ -398,6 +399,31 @@
       (lookupHlp (envBindings env)))))
 (define stEnvLookupBinding (stEnvBindOp envLookupBinding))
 
+(define (stDefine state)
+  (let* ((fnIdE (stStackPop state))
+         (fnId (fromLeftRight fnIdE))
+         (fnVal (delay (stStackPop state)))
+         (saEnvItem
+           (delay (cons (static/auto-symbol-sym fnId)
+                        (fromLeftRight (force fnVal)))))
+         (envItem
+           (delay (cons fnId
+                        (fromLeftRight (force fnVal))))))
+    (with-exception-catcher exceptionHandler (lambda ()
+    (cond ((eLeft? fnIdE) fnIdE)
+          ((not (or (static-symbol-elm? fnId) (symbol? fnId) (auto-symbol-elm? fnId)))
+           (rewind state (list fnId) "invalid identifier"))
+          ((eLeft? (force fnVal))
+           (rewind state (list fnId) (fromLeftRight (force fnVal))))
+          ((static-symbol-elm? fnId)
+           (eRight
+             (envUpdateBinding (static-symbol-env fnId)
+                               (force saEnvItem))))
+          ((auto-symbol-elm? fnId)
+           (eRight (stEnvUpdateBinding myState (force saEnvItem))))
+          (else
+           (eRight (stEnvUpdateBinding myState (force envItem)))))))))
+
 ; ############################
 ; #### EXCEPTION HANDLING ####
 ; ############################
@@ -410,6 +436,12 @@
 (define (rewind? exc)
   (and (list? exc) (eq? (car exc) 'rewind) (= (length exc) 4)))
 
+(define (stackError result)
+  (raise (list 'stackError (fromLeftRight result))))
+
+(define (stackError? exc)
+  (and (list? exc) (eq? (car exc) 'stackError) (= (length exc) 2)))
+
 ; we want to provide reasonable exceptions to the user, so we do our best
 ; to catch what's coming from the interpreter and turn it into something
 ; intelligible
@@ -418,10 +450,11 @@
          (let ((state (cadr exc))
                (stackArgs (caddr exc))
                (msg (cadddr exc)))
-           (if (pair? stackArgs)
-             (stStackNPush state stackArgs)
-             (stStackPush state stackArgs))
+           (stStackNPush state stackArgs)
            (eLeft msg)))
+        ((stackError? exc)
+         (display (string-append "--> error: " (cadr exc)))
+         (newline))
         ((noncontinuable-exception? exc) (eLeft (noncontinuable-exception-reason exc)))
         ((heap-overflow-exception? exc) (eLeft "heap overflow"))
         ((stack-overflow-exception? exc) (eLeft "call stack overflow"))
@@ -440,7 +473,10 @@
         ((multiple-c-return-exception? exc) (eLeft "multiple C return"))
         ((datum-parsing-exception? exc) (eLeft "bad read"))
         ((expression-parsing-exception? exc) (eLeft "bad parse"))
-        ((unbound-global-exception? exc) (eLeft "unbound global exception"))
+        ((unbound-global-exception? exc) (eLeft (string-append
+                                                  "unbound global exception: "
+                                                  (symbol->string
+                                                    (unbound-global-exception-variable exc)))))
         ((type-exception? exc) (eLeft "type exception"))
         ((range-exception? exc) (eLeft "range exception"))
         ((improper-length-list-exception? exc) (eLeft "improper length list"))
@@ -469,7 +505,7 @@
 
 ; primitive call
 (define (stPrimCall state binding)
-  (let* ((fnNArgs (delay (abs (primitive-arity binding))))
+  (let* ((fnNArgs (delay (primitive-arity binding)))
          (fnArgs (delay (stStackNPop state (force fnNArgs))))
          (fnCompResult
            (lambda ()
@@ -509,23 +545,36 @@
       (let ((symb-str (symbol->string symb)))
         (string->symbol (substring symb-str 1 (string-length symb-str)))))))
 
+(define (x-symbol-elm? sym len)
+  (lambda (elm)
+    (and (pair? elm)
+         (eq? sym (car elm))
+         (= len (length elm)))))
+
 (define static-symbol? (x-symbol? #\&))
 (define static-symbol->symbol (x-symbol->symbol static-symbol? "not a static symbol"))
-
 (define (mkStaticSymbolElm symb env)
   (list '& symb env))
+(define static-symbol-elm? (x-symbol-elm? '& 3))
+(define static-symbol-env caddr)
+(define static/auto-symbol-sym cadr)
 
-(define (mkAutoSymbolElm symb)
-  (list '@ symb))
-
+(define posn-symbol? (x-symbol? #\!))
+(define posn-symbol->symbol (x-symbol->symbol posn-symbol? "not a position symbol"))
 (define (mkPosnRefElm n)
   (list '! n))
+(define posn-symbol-elm? (x-symbol-elm? '! 2))
 
 (define auto-symbol? (x-symbol? #\@))
 (define auto-symbol->symbol (x-symbol->symbol auto-symbol? "not an auto symbol"))
+(define (mkAutoSymbolElm symb)
+  (list '@ symb))
+(define auto-symbol-elm? (x-symbol-elm? '@ 2))
 
 (define (lviv-eval state item)
-  (cond ((static-symbol? item) ; static symbols get pushed with their environmental binding
+  ((lambda (result) (if (eLeft? result) (stackError result) result))
+  (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
+        ((static-symbol? item) ; static symbols get pushed with their environmental binding
          (stStackPush 
            state 
            (mkStaticSymbolElm (static-symbol->symbol item)
@@ -534,7 +583,11 @@
          (stStackPush 
            state 
            (mkAutoSymbolElm (auto-symbol->symbol item))))
-        ((eq? item 'nop) (eRight '())) ; nop does nothing
+        ((posn-symbol? item)
+         (stStackPush
+           state
+           (mkPosnRefElm (posn-symbol->symbol item))))
+        ;((stEnvOp? item) ((stEnvOp? item) state))
         ((stStackOp? item) ((stStackOp? item) state))
         ((symbol? item) ; symbol : look it up
          (let* ((iLBind (stEnvLookupBinding state item))
@@ -543,15 +596,16 @@
                   (stStackPush state (mkAutoSymbolElm item)))
                  ((primitive? iBind) (stPrimCall state iBind)) ; prim: execute
                  (else (stStackPush state iBind))))) ; push onto stack
-        (else (stStackPush state item)))) ; else just push it on the stack
+        (else (stStackPush state item))))) ; else just push it on the stack
 
 (define (lviv-repl state input)
   (if (eq? input '#!eof)
     #f
     (begin 
       (if (string? input)
+        (with-exception-catcher exceptionHandler (lambda ()
         (map (lambda (x) (lviv-eval state x))
-             (call-with-input-string input read-all)))
+             (call-with-input-string input read-all)))))
       (lviv-ppstack (stGetStack state) (stEnvLookupBinding state '_stack_display_depth))
       (display "> ")
       (lviv-repl state (read-line)))))
@@ -742,10 +796,12 @@
 
 (test (equal? (stGetStack myState) '(6 5)) "state of stack is wrong after +")
 
-(stStackNPush myState '(a b))
+(lviv-eval myState '@b)
+(lviv-eval myState '@a)
+(display myState) (newline)
 
 (test (eLeft? (stPrimCall myState (fromLeftRight (stEnvLookupBinding myState '+)))) "call to + failed to fail")
-(test (equal? (stGetStack myState) '(a b 6 5)) "stack is in wrong state after type failure")
+(test (equal? (stGetStack myState) '((@ a) (@ b) 6 5)) "stack is in wrong state after type failure")
 (testLookup 'cdr (mkPrimBinding 'cdr 1))
 
 (display myState) (newline)
