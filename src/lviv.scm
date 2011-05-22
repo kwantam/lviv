@@ -574,6 +574,9 @@
 (define (lviv-eval state item)
   ((lambda (result) (if (eLeft? result) (stackError result) result))
   (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
+        ((eq? item 'env) ; env will show the present environment
+         (pp (stGetEnv state))
+         (newline))
         ((static-symbol? item) ; static symbols get pushed with their environmental binding
          (stStackPush 
            state 
