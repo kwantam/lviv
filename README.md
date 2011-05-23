@@ -20,6 +20,16 @@ If you've used an HP calculator, you're probably familiar with how RPN works. Ex
     > 6 * sqrt
     6
 
+### Order of application
+
+RPN is a strange beast in that, by default, operations still apply in "normal" order. Mathematically, this seems logical: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5.
+
+Unfortunately, this order doesn't really make much sense. Since RPN is a set of operations on a stack, the more natural order is to pop elements off the stack and apply them to the function one at a time. In other words, postfix notation makes more sense (to me, anyhow) when it is literally reflected prefix.
+
+By convention, all operations in `lviv` use reflected-prefix application order. However, functions can be applied in reverse by prepending them with `:`. Thus, `6 1 -` yields `-5`, but `6 1 :-` gives `5` as expected by someone coming from an RPN calculator.
+
+It is also possible to define certain functions to be applied in reverse order by default, in which case `:operation` applies it in the "natural" order.
+
 ## Stack operations
 
 The contents of the stack often represent most or all of the program's state. Thus, primitive stack operations underly most higher level operations in `lviv`.
@@ -158,45 +168,41 @@ Many mathematical operations, including arithmetic, trigonometric, and complex f
 
 ### Lists
 
-Lists in `lviv` have a syntax similar to those in Haskell, but are heterogeneous collections more akin to LISP lists. Formally, a list is defined either as the empty list, or as the result of the cons operation `:` on an element and a list. An element is anything that can be a stack entry.
+Lists in `lviv` should be familiar to LISP users. Formally, a list is defined either as the empty list `nil`, or as the result of the `cons` operation on an element and a list. An element is anything that can be a stack entry.
 
-`head` and `tail` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail and the head. `++_` and `_++` are the left and right append operators, respectively. (The underscore indicates which side the 0th element of the stack goes.)
+`car` and `cdr` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail and the head. `++_` and `_++` are the left and right append operators, respectively. (The underscore indicates which side the 0th element of the stack goes.)
 
-`[a,[b,c],d]`-like syntax can be used to create a list directly.
+`(a (b c) d)`-like syntax can be used to create a list directly.
 
-    > []
-    []
-    > 1 :
-    [1]
-    > 2 :
-    [2,1]
-    > [3,4] ++_
-    [2,1,3,4]
+    > nil
+    ()
+    > 1 cons
+    (1)
+    > 2 cons
+    (2,1)
+    > (3 4) ++_
+    (2 1 3 4)
     > uncons
-    [1,3,4]
+    (1 3 4)
     2
-    > :
-    [2,1,3,4]
-    > tail
-    [1,3,4]
-    > head
+    > cons
+    (2 1 3 4)
+    > cdr
+    (1 3 4)
+    > cdr
     1
-
-Strings are just lists of characters, so they can be operated upon by all list operations.
 
 ### Tuples
 
-Tuples in `lviv` are also similar to their Haskell counterparts. The tuple operators `,`, `,,`, et cetera pop a number of variables from the stack and push on a newly created tuple. `(a,(b,c),d)` style syntax can also be used.
+Tuples in `lviv` can also be constructed using `cons`. A tuple is simply a list that is not terminated with `nil`.
 
-`fst` and `snd` are defined in the prelude, but in general tuples should be deconstructed via pattern matching.
-
-    > b a ,
-    (a,b)
-    > b a ,,
-    (a,b,(a,b))
-    > (c,d,(e,f))
-    (a,b,(a,b))
-    (c,d,(e,f))
+    > b a cons
+    (a . b)
+    > b a cons cons
+    ((a . b) a . b)
+    > (c d . (e . f))
+    ((a . b) a . b)
+    (c d e . f)
 
 ### Environment bindings
 

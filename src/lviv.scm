@@ -591,22 +591,36 @@
 
 ; make a primitive binding to stick in the env
 (define (mkPrimBinding id arity)
-  (list (mklvivtag 'primitive) arity id))
+  (list (mklvivtag 'primitive) arity id #f))
+
+; make a primitive binding that causes its arguments
+; to be applied in reverse
+; `:func` is the reverse version of `:func`
+(define (mkRPrimBinding id arity)
+  (list (mklvivtag 'primitive) arity id #t))
+
+(define (prim-reverse binding)
+  (if (primitive? binding)
+    (reverse (cons (not (primitive-reverse? binding))
+                   (cdr (reverse binding))))
+    (raise "type error")))
 
 ; primitives
 (define primitive-arity cadr)
 (define primitive-id caddr)
+(define primitive-reverse? cadddr)
 (define (primitive? obj)
-  (and (list? obj) (equal? (car obj) (mklvivtag 'primitive)) (= (length obj) 3)))
+  (and (list? obj) (equal? (car obj) (mklvivtag 'primitive)) (= (length obj) 4)))
 
 ; primitive call
 (define (stPrimCall state binding)
-  (let* ((fnNArgs (delay (primitive-arity binding)))
+  (let* ((rfunc (if (primitive-reverse? binding) values reverse))
+         (fnNArgs (delay (primitive-arity binding)))
          (fnArgs (delay (stStackNPop state (force fnNArgs))))
          (fnCompResult
            (lambda ()
              (eRight (apply (eval (primitive-id binding))
-                            (fromLeftRight (force fnArgs))))))
+                            (rfunc (fromLeftRight (force fnArgs)))))))
          (fnResult (delay (with-exception-catcher 
                             (exceptionHandler #f)
                             fnCompResult))))
@@ -706,6 +720,9 @@
 (define quote-symbol->symbol (x-symbol->symbol quote-symbol? "invalid quote symbol"))
 (define quote-symbol-elm? symbol?)
 
+(define reverse-symbol? (x-symbol? #\:))
+(define reverse-symbol->symbol (x-symbol->symbol reverse-symbol? "invalid reverse symbol"))
+
 (define (symbol-elm? item) (or (static-symbol-elm? item)
                                (posn-symbol-elm? item)
                                (auto-symbol-elm? item)
@@ -735,6 +752,12 @@
         ((quote-symbol? item)  ; *bar -> bar
          (quote-symbol->symbol item))
         ((stStackOp? item) (mkStackOpElm (stStackOp? item))) ; primitive stack op
+        ((reverse-symbol? item) ; :cons -> cons in reverse
+         (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
+                (iBind (fromLeftRight iLBind)))
+           (cond ((eLeft? iLBind) iLBind)
+                 ((primitive? iBind) (prim-reverse iBind))
+                 (else (eLeft "cannot reverse non-op")))))
         ((symbol? item)        ; look up symbol in present env
          (let ((iLBind (stEnvLookupBinding state item)))
            (if (eLeft? iLBind) ; did lookup succeed?
@@ -752,6 +775,7 @@
   (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
         ((eq? item 'env) ; env will show the present environment
          (eRight (pp (stGetEnv state)) (newline)))
+        ((eLeft? item) item)
         ((eq? item 'if)
          (begin (stStackSwapUnless myState)
                 (stStackDrop myState)
@@ -793,6 +817,7 @@
 (stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
 (stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
 (stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
+(stEnvUpdateBinding myState (cons 'rcons (mkRPrimBinding 'cons 2)))
 (stEnvUpdateBinding myState (cons 'eq? (mkPrimBinding 'eq? 2)))
 
 (define (add-cxrs state n)
