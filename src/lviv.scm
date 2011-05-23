@@ -340,6 +340,15 @@
                               popRem))))))
 (define (stStackUncons state) (stStackUpd2 stackUncons state))
 
+; a thunk is a piece of code that is idempotent through eval
+; and requires an apply to get "opened up"
+; applying a thunk is like evaling its contents
+(define (stackThunk stack)
+  (if (> (depth stack) 0)
+    (cons (eRight '()) (cons (mkThunkElm (car stack)) (cdr stack)))
+    (cons (eLeft "thunk: stack empty"))))
+(define (stStackThunk state) (stStackUpd2 stackThunk state))
+
 (define (stackOp? symb f)
   (lambda (op) (if (eq? symb op) f #f)))
 
@@ -362,7 +371,9 @@
       ((stackOp? 'dropUnless stStackDropUnless) op)
       ((stackOp? 'uncons stStackUncons) op)
       ((stackOp? 'define stDefine) op)
-      ((stackOp? 'apply stApply) op)))
+      ((stackOp? 'eval stEval) op)
+      ((stackOp? 'apply stApply) op)
+      ((stackOp? 'thunk stStackThunk) op)))
 
 ; #############
 ; #### ENV #### 
@@ -496,11 +507,9 @@
                (stackArgs (caddr exc))
                (msg (cadddr exc)))
            (stStackNPush state stackArgs)
-           (eLeft msg)))
+           (dispErr msg)))
         ((stackError? exc)
-         (display (string-append "--> error: " (cadr exc)))
-         (newline)
-         (eLeft (cadr exc)))
+         (dispErr (cadr exc)))
         ((noncontinuable-exception? exc)
          (dispErr (noncontinuable-exception-reason exc)))
         ((heap-overflow-exception? exc)
@@ -599,7 +608,7 @@
              (eRight (apply (eval (primitive-id binding))
                             (fromLeftRight (force fnArgs))))))
          (fnResult (delay (with-exception-catcher 
-                            (exceptionHandler #t)
+                            (exceptionHandler #f)
                             fnCompResult))))
     (cond ((eLeft? (force fnArgs)) (force fnArgs))
             ; if there aren't enough args, the procedure fails
@@ -609,29 +618,45 @@
           ((eLeft? (force fnResult))
            (rewind state
                    (reverse (fromLeftRight (force fnArgs)))
-                   (force fnResult)))
+                   (fromLeftRight (force fnResult))))
             ; if the primitive application fails, put the args
             ; back on the stack
           (else (stStackPush state (fromLeftRight (force fnResult)))))))
             ; else push the new value onto the stack
 
-(define (stApply state)
+; lviv-eval evaluates concrete syntax; this function evaluates the AST
+; the AST and the concrete syntax are _almost_ the same, except that
+; variable references get resolved and lists get applied as syntax
+(define (stEval state)
   (let* ((fnEArg (stStackPop state))
          (fnArg (fromLeftRight fnEArg))
-         (lookupApply
+         (lookupPush
            (lambda (env name)
              (let ((lkRef (envLookupBinding env name)))
                (if (eLeft? lkRef)
                  (eLeft "lookup failed")
-                 (lviv-apply state (fromLeftRight lkRef)))))))
-    (cond ((eLeft? fnEArg) (fnEArg))
-          ((static-symbol-elm? fnArg) (lookupApply (caddr fnArg) (cadr fnArg)))
-          ((auto-symbol-elm? fnArg) (lookupApply (stGetEnv state) (cadr fnArg)))
-          ((quote-symbol-elm? fnArg) (lookupApply (stGetEnv state) fnArg))
-          ((posn-symbol-elm? fnArg) (rewind state (list fnArg) "not implemented"))
-          ((primitive? fnArg) (stPrimCall state fnArg))
-          ((list? fnArg) (map (lambda (item) (lviv-apply state item)) fnArg))
-          (else (rewind state (list fnArg) "type error")))))
+                 (stStackPush state (fromLeftRight lkRef)))))))
+    (cond ((eLeft? fnEArg) fnEArg)                                                  ; pop failed
+          ((static-symbol-elm? fnArg) (lookupPush (caddr fnArg) (cadr fnArg)))      ; lookup static
+          ((auto-symbol-elm? fnArg) (lookupPush (stGetEnv state) (cadr fnArg)))     ; lookup auto
+          ((quote-symbol-elm? fnArg)
+           (stStackPush state (lviv-eval state fnArg)))                             ; handle like the literal was just typed in
+          ((posn-symbol-elm? fnArg) (rewind state (list fnArg) "not implemented"))  ; haven't done positionals yet
+          ((lviv-tagged? fnArg) (stStackPush state fnArg))                          ; idempotent through eval
+          ((list? fnArg) (map (lambda (item) (lviv-apply state item)) fnArg))       ; apply as if typed in
+          (else (stStackPush state (lviv-eval state fnArg))))))                     ; else assume it's idempotent
+
+; since lviv-apply always works on AST, stApply and lviv-apply are
+; basically identical, but we have to wrap a safe pop around the
+; former to get the latter
+(define (stApply state) ; 
+  (let* ((fnEArg (stStackPop state))            ; pop off element
+         (fnArg (fromLeftRight fnEArg)))
+    (cond ((eLeft? fnEArg) fnEArg)              ; pop unsuccessful?
+          ((thunkElm? fnArg)                    ; thunk?
+           (begin (stStackPush state (thunkElm->elm fnArg)) ; unwrap
+                  (stEval state)))                          ; eval
+          (else (lviv-apply state fnArg)))))    ; otherwise, just apply it like anything else
 
 ; ###############
 ; #### EVAL #####
@@ -686,14 +711,20 @@
                                (auto-symbol-elm? item)
                                (quote-symbol-elm? item)))
 
-(define (mkStackOpElm op) (cons 'stackop op))
+(define (mkStackOpElm op) (cons (mklvivtag 'stackop) op))
 (define (stackOpElm? op)
-  (and (pair? op) (eq? 'stackop (car op)) (procedure? (cdr op))))
+  (and (pair? op) (equal? (mklvivtag 'stackop) (car op)) (procedure? (cdr op))))
 (define stackOpElm->stackop cdr)
+
+(define (mkThunkElm op) (cons (mklvivtag 'thunk) op))
+(define (thunkElm? op)
+  (and (pair? op) (equal? (mklvivtag 'thunk) (car op))))
+(define thunkElm->elm cdr)
 
 (define (lviv-eval state item)
   (cond ((eq? item 'nop) item) ; nop is same in the AST
         ((eq? item 'env) item) ; env is same in the AST
+        ((eq? item 'if) item)
         ((static-symbol? item) ; &foo -> (& foo env)
          (mkStaticSymbolElm (static-symbol->symbol item)
                             (stGetEnv state)))
@@ -721,6 +752,10 @@
   (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
         ((eq? item 'env) ; env will show the present environment
          (eRight (pp (stGetEnv state)) (newline)))
+        ((eq? item 'if)
+         (begin (stStackSwapUnless myState)
+                (stStackDrop myState)
+                (stEval myState)))
         ((symbol-elm? item)
          (stStackPush state item))
         ((stackOpElm? item) ((stackOpElm->stackop item) state))
@@ -758,6 +793,7 @@
 (stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
 (stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
 (stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
+(stEnvUpdateBinding myState (cons 'eq? (mkPrimBinding 'eq? 2)))
 
 (define (add-cxrs state n)
   (letrec ((nums (take n '(1 2 4 8 16)))
