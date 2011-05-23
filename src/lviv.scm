@@ -23,6 +23,44 @@
 ; **** MISC ****
 ; **************
 
+; string-contains    s1 s2 [start1 end1 start2 end2] -> integer or false
+; string-contains-ci s1 s2 [start1 end1 start2 end2] -> integer or false
+;     Does string s1 contain string s2?
+;     Return the index in s1 where s2 occurs as a substring, or false. The
+;     optional start/end indices restrict the operation to the indicated
+;     substrings.
+; We do not support the optional arguments
+; this function is from http://okmij.org/ftp/Scheme/lib/srfi-13-local.scm
+; as noted on http://okmij.org/ftp/, this code is in the public domain
+(define (string-contains str pattern)
+  (let* ((pat-len (string-length pattern))
+         (search-span (- (string-length str) pat-len))
+         (c1 (if (zero? pat-len) #f (string-ref pattern 0)))
+         (c2 (if (<= pat-len 1) #f (string-ref pattern 1))))
+    (cond
+      ((not c1) 0)           ; empty pattern, matches upfront
+      ((not c2) (string-index str c1)) ; one-char pattern
+      (else                  ; matching a pattern of at least two chars
+        (let outer ((pos 0))
+          (cond
+            ((> pos search-span) #f)	; nothing was found thru the whole str
+            ((not (char=? c1 (string-ref str pos)))
+             (outer (+ 1 pos)))	; keep looking for the right beginning
+            ((not (char=? c2 (string-ref str (+ 1 pos))))
+             (outer (+ 1 pos)))	; could've done pos+2 if c1 == c2....
+            (else                  	; two char matched: high probability
+              ; the rest will match too
+              (let inner ((i-pat 2) (i-str (+ 2 pos)))
+                (if (>= i-pat pat-len) pos ; whole pattern matched
+                  (if (char=? (string-ref pattern i-pat)
+                              (string-ref str i-str))
+                    (inner (+ 1 i-pat) (+ 1 i-str))
+                    (outer (+ 1 pos))))))))))))	; mismatch after partial match
+
+; same, but for a symbol via conversion to string
+(define (symbol-contains k pstring)
+  (string-contains (symbol->string k) pstring))
+
 ; take, like the Haskell function
 ; take :: Int -> [a] -> [a]
 (define (take n lst)
@@ -323,7 +361,8 @@
       ((stackOp? 'dropIf stStackDropIf) op)
       ((stackOp? 'dropUnless stStackDropUnless) op)
       ((stackOp? 'uncons stStackUncons) op)
-      ((stackOp? 'define stDefine) op)))
+      ((stackOp? 'define stDefine) op)
+      ((stackOp? 'apply stApply) op)))
 
 ; #############
 ; #### ENV #### 
@@ -533,15 +572,23 @@
 ; #### FUNCTION CALLS ####
 ; ########################
 
+; lviv-tag is used to tag internal objects
+(define lviv-tag '|(<#lviv#>)|)
+(define (mklvivtag x) (list lviv-tag x))
+(define (lviv-tagged? x)
+  (and (pair? x)
+       (pair? (car x))
+       (eq? lviv-tag (caar x))))
+
 ; make a primitive binding to stick in the env
 (define (mkPrimBinding id arity)
-  (list 'primitive arity id))
+  (list (mklvivtag 'primitive) arity id))
 
 ; primitives
 (define primitive-arity cadr)
 (define primitive-id caddr)
 (define (primitive? obj)
-  (and (list? obj) (eq? (car obj) 'primitive) (= (length obj) 3)))
+  (and (list? obj) (equal? (car obj) (mklvivtag 'primitive)) (= (length obj) 3)))
 
 ; primitive call
 (define (stPrimCall state binding)
@@ -568,6 +615,24 @@
           (else (stStackPush state (fromLeftRight (force fnResult)))))))
             ; else push the new value onto the stack
 
+(define (stApply state)
+  (let* ((fnEArg (stStackPop state))
+         (fnArg (fromLeftRight fnEArg))
+         (lookupApply
+           (lambda (env name)
+             (let ((lkRef (envLookupBinding env name)))
+               (if (eLeft? lkRef)
+                 (eLeft "lookup failed")
+                 (lviv-apply state (fromLeftRight lkRef)))))))
+    (cond ((eLeft? fnEArg) (fnEArg))
+          ((static-symbol-elm? fnArg) (lookupApply (caddr fnArg) (cadr fnArg)))
+          ((auto-symbol-elm? fnArg) (lookupApply (stGetEnv state) (cadr fnArg)))
+          ((quote-symbol-elm? fnArg) (lookupApply (stGetEnv state) fnArg))
+          ((posn-symbol-elm? fnArg) (rewind state (list fnArg) "not implemented"))
+          ((primitive? fnArg) (stPrimCall state fnArg))
+          ((list? fnArg) (map (lambda (item) (lviv-apply state item)) fnArg))
+          (else (rewind state (list fnArg) "type error")))))
+
 ; ###############
 ; #### EVAL #####
 ; ###############
@@ -589,31 +654,31 @@
 (define (x-symbol-elm? sym len)
   (lambda (elm)
     (and (pair? elm)
-         (eq? sym (car elm))
+         (equal? (mklvivtag sym) (car elm))
          (= len (length elm)))))
 
 (define static-symbol? (x-symbol? #\&))
-(define static-symbol->symbol (x-symbol->symbol static-symbol? "not a static symbol"))
+(define static-symbol->symbol (x-symbol->symbol static-symbol? "invalid static symbol"))
 (define (mkStaticSymbolElm symb env)
-  (list '& symb env))
+  (list (mklvivtag '&) symb env))
 (define static-symbol-elm? (x-symbol-elm? '& 3))
 (define static-symbol-env caddr)
 (define static/auto-symbol-sym cadr)
 
 (define posn-symbol? (x-symbol? #\!))
-(define posn-symbol->symbol (x-symbol->symbol posn-symbol? "not a position symbol"))
+(define posn-symbol->symbol (x-symbol->symbol posn-symbol? "invalid position symbol"))
 (define (mkPosnRefElm n)
-  (list '! n))
+  (list (mklvivtag '!) n))
 (define posn-symbol-elm? (x-symbol-elm? '! 2))
 
 (define auto-symbol? (x-symbol? #\@))
-(define auto-symbol->symbol (x-symbol->symbol auto-symbol? "not an auto symbol"))
+(define auto-symbol->symbol (x-symbol->symbol auto-symbol? "invalid auto symbol"))
 (define (mkAutoSymbolElm symb)
-  (list '@ symb))
+  (list (mklvivtag '@) symb))
 (define auto-symbol-elm? (x-symbol-elm? '@ 2))
 
 (define quote-symbol? (x-symbol? #\*))
-(define quote-symbol->symbol (x-symbol->symbol quote-symbol? "not a quote symbol"))
+(define quote-symbol->symbol (x-symbol->symbol quote-symbol? "invalid quote symbol"))
 (define quote-symbol-elm? symbol?)
 
 (define (symbol-elm? item) (or (static-symbol-elm? item)
@@ -896,7 +961,7 @@
         (with-exception-catcher (exceptionHandler #f)
          (lambda () (stPrimCall myState (lviv-eval myState '+)))))
         "call to + failed to fail")
-(test (equal? (stGetStack myState) '((@ a) (@ b) 6 5))
+(test (equal? (stGetStack myState) (list (mkAutoSymbolElm 'a) (mkAutoSymbolElm 'b) 6 5))
       "stack is in wrong state after type failure")
 (testLookup 'cdr (mkPrimBinding 'cdr 1))
 
