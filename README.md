@@ -1,6 +1,6 @@
 # lviv
 
-`lviv` is a functional RPN programming language.
+lviv is a functional RPN programming language.
 
 The name comes from the city of Lviv, where Jan Lukasiewicz was born. Lukasiewicz invented prefix or "Polish" notation to simplify the syntax of sentential logic; later, Burks, Warren, and Wright (and even later Bauer and Dijkstra) proposed postfix, or "reverse Polish" notation as a good fit for stack based machines.
 
@@ -22,17 +22,19 @@ If you've used an HP calculator, you're probably familiar with how RPN works. Ex
 
 ### Order of application
 
-RPN is a strange beast in that, by default, operations still apply in "normal" order. Mathematically, this seems logical: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5.
+By default, RPN operations are still applied in conventional order: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5. This seems somewhat logical for a calculator, since it matches our intuition for the basic noncommutative arithmetic operations.
 
-Unfortunately, this order doesn't really make much sense. Since RPN is a set of operations on a stack, the more natural order is to pop elements off the stack and apply them to the function one at a time. In other words, postfix notation makes more sense (to me, anyhow) when it is literally reflected prefix.
+Unfortunately, this order seems (to me) pretty clunky when recursively applying operations that consume and return multiple values. In this context, it seems more sensible to think of function application as repeatedly applying stack values to a curried function until it returns a value. (lviv functions are not automatically curried like Haskell functions, so perhaps one could succesfully argue that I only think this way because I write too much Haskell.)
 
-By convention, all operations in `lviv` use reflected-prefix application order. However, functions can be applied in reverse by prepending them with `:`. Thus, `6 1 -` yields `-5`, but `6 1 :-` gives `5` as expected by someone coming from an RPN calculator.
+By convention, all operations in lviv use reflected-prefix application order. However, functions can be applied in reverse by prepending them with `:`. Thus, `6 1 -` yields `-5`, but `6 1 :-` gives `5` as expected by someone used to an RPN calculator.
 
-It is also possible to define certain functions to be applied in reverse order by default, in which case `:operation` applies it in the "natural" order.
+#### `_stack_conventional` (TODO)
+
+If the `_stack_conventional` environment variable is `#t`, conventional order will be used by default (in which case `:` produces reflected-prefix ordering). Note that `_stack_conventional` is retrieved from the environment in the context of the present function application, so order can be inverted inside let or lambda constructs without corrupting other functions (or it can simply be set at the top of every program if you think I'm just being dumb).
 
 ## Stack operations
 
-The contents of the stack often represent most or all of the program's state. Thus, primitive stack operations underly most higher level operations in `lviv`.
+The contents of the stack often represent most or all of the program's state. Thus, primitive stack operations underly most higher level operations in lviv.
 
 There are no explicit "push" and "pop" operations; values are pushed as they're entered, and popped as needed for function application.
 
@@ -47,9 +49,7 @@ Swap the 0th and 1st entry in the stack.
     2
     1
 
-### `drop`
-### `<n> dropN`
-### `clear`
+### `drop`, `<n> dropN`, `clear`
 
 `drop` removes the 0th element from the stack. `dropN` pops the 0th entry off the stack, and then drops that number of remaining entries. `clear` drops all entries from the stack.
 
@@ -63,10 +63,9 @@ Swap the 0th and 1st entry in the stack.
     > dropN
     > 
 
-### `<n> roll`
-### `<n> unroll`
+### `<n> roll`, `<n> unroll`
 
-`roll` and `unroll` pop the 0th element off the stack and perform a circular shift upwards (`roll`) or downwards (`unroll`) involving `n` elements.
+`roll` and `unroll` pop the 0th element off the stack and perform a circular shift upwards (`roll`) or downwards (`unroll`) involving *n* elements.
 
     > 1 2 3 4 5 6
     1
@@ -89,10 +88,9 @@ Swap the 0th and 1st entry in the stack.
     3
     5
 
-### `dup`
-### `<n> dupN`
+### `dup` `<n> dupN`
 
-`dup` pushes a copy of the 0th element onto the stack. `dupN` pops the 0th argument off the stack, and pushes copies of the top `n` elements onto the stack.
+`dup` pushes a copy of the 0th element onto the stack. `dupN` pops the 0th argument off the stack, and pushes copies of the top *n* elements onto the stack.
 
     > 1 2 3 dup
     1
@@ -108,10 +106,9 @@ Swap the 0th and 1st entry in the stack.
     3
     3
 
-### `<n> pick`
-### `over`
+### `over`, `<n> pick`
 
-`pick` pops the 0th element off the stack, then pushes a copy of the `n`th element onto the stack. `over` is equivalent to `2 pick`.
+`pick` pops the 0th element off the stack, then pushes a copy of the *nth* element onto the stack. `over` is equivalent to `2 pick`.
 
     > 1 2 3
     1
@@ -141,22 +138,23 @@ Pushes the depth of the stack prior to the `depth` operation onto the stack.
     > 2 dropN depth
     0
 
-### `<bool> swapIf`
-### `<bool> swapUnless`
-### `<bool> dropIf`
-### `<bool> dropUnless`
+### `<bool> swapIf`, `<bool> swapUnless`, `<bool> dropIf`, `<bool> dropUnless`
 
-`swapIf` pops the 0th element off the stack, and then performs a `swap` if that element evaluated to a true value. `swapUnless` does the same for a false value.
+`swapIf` pops the 0th element off the stack, and then performs a `swap` if that element was `#t`. `swapUnless` does the same for `#f`. `dropIf` and `dropUnless` behave similarly. Note that these operations only accept the boolean values `#t` or `#f`; other values result in a type error.
 
-    > 1 2 True swapIf drop
+    > 1 2 #t swapIf drop
     2
     > clear
-    > 1 2 False swapUnless -
-    1
+    > 1 2 #f swapUnless -
+    -1
 
 ### `nop`
 
 `nop` does nothing. It is useful for operations that conditionally modify the stack.
+
+### `env`
+
+`env` shows the current environment. It can be useful for debugging.
 
 ### Mathematical operations
 
@@ -164,13 +162,13 @@ Many mathematical operations, including arithmetic, trigonometric, and complex f
 
 ## Functional syntax
 
-`lviv` supports a full range of standard functional syntax.
+lviv supports a full range of standard functional syntax.
 
 ### Lists
 
-Lists in `lviv` should be familiar to LISP users. Formally, a list is defined either as the empty list `nil`, or as the result of the `cons` operation on an element and a list. An element is anything that can be a stack entry.
+Lists in lviv should be familiar to LISP users. Formally, a list is defined either as the empty list (`nil` or `()`), or as the result of the `cons` operation on an element and a list. An element is anything that can be a stack entry.
 
-`car` and `cdr` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail and the head. `++_` and `_++` are the left and right append operators, respectively. (The underscore indicates which side the 0th element of the stack goes.)
+`car` and `cdr` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail and the head.
 
 `(a (b c) d)`-like syntax can be used to create a list directly.
 
@@ -179,8 +177,8 @@ Lists in `lviv` should be familiar to LISP users. Formally, a list is defined ei
     > 1 cons
     (1)
     > 2 cons
-    (2,1)
-    > (3 4) ++_
+    (2 1)
+    > (3 4) :append
     (2 1 3 4)
     > uncons
     (1 3 4)
@@ -189,12 +187,12 @@ Lists in `lviv` should be familiar to LISP users. Formally, a list is defined ei
     (2 1 3 4)
     > cdr
     (1 3 4)
-    > cdr
+    > car
     1
 
 ### Tuples
 
-Tuples in `lviv` can also be constructed using `cons`. A tuple is simply a list that is not terminated with `nil`.
+Tuples in lviv can also be constructed using `cons`. A tuple is simply an unterminated list.
 
     > b a cons
     (a . b)
@@ -212,136 +210,139 @@ Tuples in `lviv` can also be constructed using `cons`. A tuple is simply a list 
 
 Identifiers can contain alphanumerics or any of `! $ % & * + - . / : < = > ? @ ^ _ ~`, but must begin with a character that cannot begin a number and is not otherwise reserved (i.e., any valid character other than `. + - & @`).
 
-When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `@` sigil can be used. The `&` sigil indicates that the variable is statically bound in enclosing environment (Scheme-style static scope), whereas the `@` prefix invokes *automatic* scope, described below.
+When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `*` sigil can be used. The `&` sigil indicates that the variable is statically bound in enclosing environment (Scheme-style static scope), whereas the `*` prefix simply places the identifier on the stack, leaving its binding to an environment until evaluation.
 
-    > 1 z define
-    --> z : 1
+    > 1 *z define
     > 2 z
     2
     1
-    > -
+    > :-
     1
-    > &z +
-    #<thunk { 1 &z + }>
+    > (&z +) :cons thunk
+	#<thunk (1 &z +)>
     > 2 z define
-    --> z : 2
-    #<thunk { 1 &z + }>
-    > eval
+    #<thunk (1 &z +)>
+    > apply
     3
 
 #### Scope
 
-In `lviv`, all variables are statically scoped to *some* environment. However, because thunks must be defined before being bound by `lambda` or `let`, immediate static scoping is insufficient. *Automatic* or *delayed static* scoping allows variables in a thunk to be statically bound inside their enclosing `lambda` or `let`.
+Static variables (invoked with `&`) bind immediately to the enclosing environment when the variable is put on the stack. The static binding element carries a reference to its environment with it, soit can be properly dereferenced even when enclosed in another environment (e.g., a let or lambda) where its name is shadowed.
 
-Static variables (invoked with `&`) bind immediately to the enclosing environment when the variable is put on the stack.
+Unbound identifiers (invoked with `*`) have no binding when they are put on the stack. Instead, they are bound when they are evaluated. Since lambdas and lets carry an environment with them, unbound identifiers are still statically scoped inside these elements. However, an unbound identifier inside a thunk takes its value from the enclosing environment at the time of application (as is the case with the `delay`-`force` relationship in Scheme).
 
-Automatic variables (invoked with `@`) behave like statically scoped variables, except that their binding is not fixed when they are put on the stack. Instead, they are bound when their enclosing thunk is passed to `lambda`, `let`, or `eval`, according to the following rules:
+### `eval` and `apply`
 
-- If a `lambda` or `let` encloses an automatically scoped variable and the variable's identifier matches one of the `lambda` or `let` bindings, the variable is bound to the `lambda` or `let` environment.
-- Otherwise, the variable becomes bound to the environment enclosing the `lambda`, `let`, or `eval`.
-
-### Thunks
-
-`lviv` represents delayed computations using thunks. The `eval` function attempts to apply a thunk, popping positionally referenced variables from the stack and binding them before evaluation. If the thunk references unbound variables, an error results from the computation and the stack is unmodified. `eval`ing a literal expression has no effect. If an error occurs during evaluation after the binding step, the modifications to the stack still occur and the value of the thunk becomes `nop`.
+`eval` evaluates the top entry on the stack. Variables are dereferenced, but most other expressions are idempotent. In LISP, evaluating a list results in a computation as if that list were typed in as code. In lviv, lists do not represent a fundamental unit of computation, so evaluating a list merely dereferences the enclosed variables. To cause the contents to be computed as if entered, a list must be turned into a thunk and then applied using `apply`.
 
     > 1 eval
     1
+	> *a define
+	> *a
+	a
+	> eval
+	> (*a 2) :cons
+	(1 a 2)
+	> 4 *a define
+	(1 a 2)
+	> eval
+	(1 4 2)
 
-#### Braced thunks
+Other than when working on thunks, `apply` takes the top element off the list and applies it as it just typed into the REPL. Thus, the semantics of `apply` are not exactly the same as in LISP: in lviv, `apply` applies the top element on the stack to the stack. Most elements are idempotent through such application (i.e., applying 1 to the stack just puts 1 on the stack); lambdas and primitives result in computation when applied to the stack.
 
-Thunks can be denoted by enclosing an expression in braces (`{}`).
+	...continued from above...
+	(1 4 2)
+	> 1 apply
+	(1 4 2)
+	1
+	> *cons
+	(1 4 2)
+	1
+	cons
+	> apply
+	(1 4 2)
+	1
+	cons
+	> eval
+	(1 4 2)
+	1
+	#<primitive cons>
+	> apply
+	(1 1 4 2)
 
-    > { 1 0 / }
-    #<thunk { 1 0 / }>
-    > eval
-    --> error: division by zero
-    > 1 z define { 1 z + }
-    #<thunk { 1 1 + }>
-    > 2 z define eval
-    2
+thunks are a special case for `apply`; see below.
 
-#### Unbound identifiers
+### Thunks
 
-Referencing an unbound identifier in an expression results in a thunk where the unbound identifier is automatically scoped (as if invoked with `@identifier`). Statically scoped unbound identifiers can also be invoked using `&`.
+lviv represents explicitly delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
 
-    > x
-    @x : #<unbound>
-    > 1 +
-    #<thunk { @x 1 + }>
-    > 3 * &y -
-    #<thunk { @x 1 + 3 * &y - }>
-    > eval
-    --> error: unbound variables x,y in eval
-    #<thunk { @x 1 + 3 * &y - }>
-    > @z /
-    #<thunk { @x 1 + 3 * &y - @z / }>
-    > 1 z define eval
-    --> error: unbound variables x,y in eval
-    #<thunk { @x 1 + 3 * &y - @z / }>
+	> (1 *z +) thunk
+	#<thunk (1 z +)>
+	> eval
+	#<thunk (1 z +)>
+	> dup 2 *z define apply
+	#<thunk (1 z +)>
+	3
+	> 15 + *z define apply
+	19
 
-Note that when an unbound variable error occurs during an eval, all bindings are undone and the stack is unchanged.
+### Positional identifiers *TODO*
 
-#### Positional identifiers
+Positional identifiers are identifiers of the form `![0-9]+` which are unbound until evaluated. In a thunk, these identifiers represent the corresponding stack positions at the time the thunk is evaluated.
 
-Positional identifiers are identifiers of the form `#[0-9]+` which are unbound until evaluated. In a thunk, these identifiers represent the corresponding stack positions at the time the thunk is evaluated.
-
-    > 1 #0
+    > 1 !0
     1
-    #0 : #<unbound>
+    !0
     > eval
     1
-    > #0 1 +
+    > (!0 1 +) thunk
     1
-    #<thunk { #0 1 + }>
+    #<thunk (!0 1 +)>
     > 2 swap
     1
     2
-    #<thunk { #0 1 + }>
+    #<thunk (!0 1 +)>
     > eval
     1
     3
-
-When thunks are nested, positional identifiers are relative to the immediately containing thunk. To escape nesting levels, prepend additional `#`s to the identifier.
-
-	> 0 { { 1 ##0 / } 0 #0 == dropIf } eval
 
 ### Lambdas
 
-`lambda` combines a thunk and a positional binding list into a function. Thunks using positional identifiers cannot be bound with a `lambda`.
+`lambda` combines a thunk and a positional binding list into a function. Positional identifiers cannot be used with a `lambda`.
 
-Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. Any automatically scoped variables in the thunk that correspond to identifiers in the positional binding list become lexically scoped to the `lambda`, resulting in a closure.
+Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. lambdas
 
-    > x
-    @x : #<unbound>
-    > 1 +
-    #<thunk { @x 1 + }>
-    > y *
-    #<thunk { @x 1 + @y * }>
-    > [y,x] lambda
-    #<lambda [y,x] thunk { x 1 + y * }>
+    > *x
+    x
+    > (1 +) :cons
+	(x 1 +)
+    > (y *) :append
+	(x 1 + y *)
+    > (*y *x) *xyfunc lambda
     > 2 1
-    #<lambda [y,x] thunk { x 1 + y * }>
     2
     1
-    > 3 roll
-    2
-    1
-    #<lambda [y,x] thunk { x 1 + y * }>
-    > eval
+    > xyfunc
     3
+    > 2 *xyfunc eval
+	3
+	2
+	#<lambda xyfunc>
+	> apply
+	8
 
 The above lambda is equivalent to
 
-    > #1 1 + #0 *
-    #<thunk { #1 1 + #0 * }>
+    > (swap 1 + swap *) thunk
+    #<thunk (swap 1 + swap *)>
     > 2 1 3 roll
     2
     1
-    #<thunk { #1 1 + #0 * }>
-    > eval
+    #<thunk (swap 1 + swap *)>
+    > apply
     3
 
-### `let`
+### `let` TODO
 
 `let` is similar to `lambda`: it takes a thunk and a binding list. `let` is evaluated immediately and the result of the evaluation is pushed onto the stack. If the `let` expression contains unbound variables after evaluation, its result is a thunk.
 
@@ -358,40 +359,33 @@ The `let` expression uses a named binding list rather than a positional binding 
 
 ### `<consequent> <alternative> <test> if`
 
-`if` is actually just equivalent to `swapUnless drop eval`. To be sure that only one of the consequent or alternative is evaluated, make sure to delay their evaluation!
+`if` is actually just a short way of saying `swapUnless drop thunk apply`.
 
-    > { 1 } { 2 } #t if
+    > 1 (nop) (0 /) #t if
     1
-    > { 1 } { 2 } #f if
+    > (3 -) (3 +) #f if
+    4
+    > (3 :-) (3 +) #t swapUnless drop thunk apply
     1
-    2
-    > 1 2 #f swapUnless drop eval
-    1
-    2
-    2
+	> ((2) (1) #t if) (0) #t if
+	2
 
-Here's a contrived example where you'd need to delay evaluation:
+The first example above illustrates that only one of the consequent or alternative is applied as one would expect.
 
-    > { 1 0 / } { NaN } 0 0 /= if
-    NaN
-
-If you didn't delay evaluation, you'd end up evaluating `1 0 /` and immediately generate an error.
+### `cond` TODO
 
 ## Other operations
 
-### exception handling
+### exception handling TODO
 
-tbd
 
-### `tstk`, `untstk`, and `rtstk`
-###### probably YAGNI
+### `tstk`, `untstk`, and `rtstk` TODO
 
 `tstk` moves aside the present stack and replaces it with an empty temporary stack. `untstk` removes the temporary stack and restores the previous one. `rtstk` pops the 0th value off the temporary stack, restores the previous stack, and pushes this value.
 
 `tstk` calls can be nested; each `untstk` or `rtstk` ascends one level of nesting.
 
-### namespacing
-###### probably YAGNI
+### namespacing TODO
 
     > :: namespace
     --> namespace : ::
@@ -428,5 +422,3 @@ tbd
     1
     2
     3
-
-

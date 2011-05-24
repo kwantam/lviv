@@ -211,7 +211,7 @@
 
 ; stack depth
 (define depth length)
-(define (stStackDepth state) (depth (stGetStack state)))
+(define (stStackDepth state) (stStackPush state (depth (stGetStack state))))
 
 ; pop off stack
 ; when popping, return (cons <popped value> <new stack>)
