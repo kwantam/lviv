@@ -394,6 +394,7 @@
       ((stackOp? 'apply stApply) op)
       ((stackOp? 'thunk stStackThunk) op)
       ((stackOp? 'lambda stLambda) op)
+      ((stackOp? 'primitive stPrimitive) op)
       ))
 
 ; #############
@@ -484,9 +485,7 @@
            (delay (cons fnId
                         (fromLeftRight (force fnVal))))))
     (cond ((eLeft? fnIdE) fnIdE)
-          ((not (or (static-symbol-elm? fnId)
-                    (quote-symbol-elm? fnId)
-                    (auto-symbol-elm? fnId)))
+          ((not (symbol-elm? fnId))
            (rewind state (list fnId) "invalid identifier"))
           ((eLeft? (force fnVal))
            (rewind state (list fnId) (fromLeftRight (force fnVal))))
@@ -501,30 +500,54 @@
 
 (define (stLambda state)
   (let* ((fnLArgs (stStackNPop state 3))
-         (fnId (caddr (fromLeftRight fnLArgs)))
-         (fnArgs (cadr (fromLeftRight fnLArgs)))
-         (fnxCode (car (fromLeftRight fnLArgs)))
+         (fnId (delay (caddr (fromLeftRight fnLArgs))))
+         (fnArgs (delay (cadr (fromLeftRight fnLArgs))))
+         (fnxCode (delay (car (fromLeftRight fnLArgs))))
          (fnCode 
-           (if (list? fnxCode) fnxCode (force fnxCode)))
+           (delay
+             (if (list? (force fnxCode))
+               (force fnxCode)
+               (list (force fnxCode)))))
          (fnLambda
-           (lambda (env) (mkLambda fnCode fnArgs env))))
+           (lambda (env) (mkLambda (force fnCode) (force fnArgs) env))))
     (cond ((eLeft? fnLArgs) fnLArgs)
-          ((not (or (static-symbol-elm? fnId)
-                    (quote-symbol-elm? fnId)
-                    (auto-symbol-elm? fnId)))
+          ((not (symbol-elm? (force fnId)))
            (rewind state (reverse (fromLeftRight fnLArgs)) "invalid identifier"))
-          ((static-symbol-elm? fnId)
+          ((static-symbol-elm? (force fnId))
            (eRight
-             (envUpdateBinding (static-symbol-env fnId)
-                               (cons (static/auto-symbol-sym fnId)
-                                     (fnLambda (static-symbol-env fnId))))))
-          ((auto-symbol-elm? fnId)
+             (envUpdateBinding (static-symbol-env (force fnId))
+                               (cons (static/auto-symbol-sym (force fnId))
+                                     (fnLambda (static-symbol-env (force fnId)))))))
+          ((auto-symbol-elm? (force fnId))
            (eRight
-             (stEnvUpdateBinding state (cons (static/auto-symbol-sym fnId)
+             (stEnvUpdateBinding state (cons (static/auto-symbol-sym (force fnId))
                                              (fnLambda (stGetEnv state))))))
           (else
             (eRight
-              (stEnvUpdateBinding state (cons fnId (fnLambda (stGetEnv state)))))))))
+              (stEnvUpdateBinding state (cons (force fnId) (fnLambda (stGetEnv state)))))))))
+
+(define (stPrimitive state)
+  (let* ((fnLArgs (stStackNPop state 2))
+         (fnId (delay (cadr (fromLeftRight fnLArgs))))
+         (fnArity (delay (car (fromLeftRight fnLArgs))))
+         (fnBinding (lambda (id) (mkPrimBinding id (force fnArity))))
+         (saSym (delay (static/auto-symbol-sym (force fnId)))))
+    (cond ((eLeft? fnLArgs) fnLArgs)
+          ((not (symbol-elm? (force fnId)))
+           (rewind state (reverse (fromLeftRight fnLArgs)) "invalid identifier"))
+          ((static-symbol-elm? (force fnId))
+           (eRight
+             (envUpdateBinding (static-symbol-env (force fnId))
+                               (cons (force saSym)
+                                     (fnBinding (force saSym))))))
+          ((auto-symbol-elm? (force fnId))
+           (eRight
+             (stEnvUpdateBinding state (cons (force saSym)
+                                             (fnBinding (force saSym))))))
+          (else
+            (eRight
+              (stEnvUpdateBinding state (cons (force fnId)
+                                              (fnBinding (force fnId)))))))))
 
 ; ############################
 ; #### EXCEPTION HANDLING ####
@@ -646,12 +669,10 @@
 (define (mkLambda code args env)
   (list (mklvivtag 'lambda) args code (object->serial-number env) #f))
 (define (lambda? obj)
-  (and (pair? obj) (list? obj) (equal? (car obj) (mklvivtag 'lambda)) (= (length obj) 5)))
+  (and (list? obj) (= (length obj) 5) (equal? (car obj) (mklvivtag 'lambda))))
 ; reverse order of application
 (define (lambda-reverse binding)
-  (if (lambda? binding)
-    (reverse (cons (not (lambda-reverse? binding))
-                   (cdr (reverse binding))))))
+  (reverse (cons (not (lambda-reverse? binding)) (cdr (reverse binding)))))
 (define (lambda-reverse? x) (list-ref x 4))
 (define lambda-args cadr)
 (define lambda-code caddr)
@@ -688,17 +709,14 @@
   (list (mklvivtag 'primitive) arity id #f))
 
 (define (prim-reverse binding)
-  (if (primitive? binding)
-    (reverse (cons (not (primitive-reverse? binding))
-                   (cdr (reverse binding))))
-    (raise "type error")))
+  (reverse (cons (not (primitive-reverse? binding)) (cdr (reverse binding)))))
 
 ; primitives
 (define primitive-arity cadr)
 (define primitive-id caddr)
 (define primitive-reverse? cadddr)
 (define (primitive? obj)
-  (and (pair? obj) (list? obj) (equal? (car obj) (mklvivtag 'primitive)) (= (length obj) 4)))
+  (and (list? obj) (= (length obj) 4) (equal? (car obj) (mklvivtag 'primitive))))
 
 ; primitive call
 (define (stPrimCall state binding)
@@ -807,7 +825,7 @@
 (define reverse-symbol->symbol (x-symbol->symbol reverse-symbol? "invalid reverse symbol"))
 
 (define (symbol-elm? item) (or (static-symbol-elm? item)
-                               (posn-symbol-elm? item)
+                               ;(posn-symbol-elm? item)
                                (auto-symbol-elm? item)
                                (quote-symbol-elm? item)))
 
@@ -852,6 +870,7 @@
                   (iBind (fromLeftRight iLBind)))
              (cond ((eLeft? iLBind) iLBind)
                    ((primitive? iBind) (prim-reverse iBind))
+                   ((lambda? iBind) (lambda-reverse iBind))
                    (else (eLeft "cannot reverse non-op")))))
           ((symbol? item)        ; look up symbol in present env
            (let ((iLBind (stEnvLookupBinding state item)))
@@ -874,9 +893,13 @@
                 (newline)
                 (eRight '())))
         ((eLeft? item) item)
-        ((eq? item 'if)
+        ((eq? item 'if) ; this is a really slow way of making an if, but it's OK for now
+         ; <consequent> <alternative> <boolean> if
+         ; this could just be a 3-arg lambda:
+         ; (consequent alternative bool swapUnless drop thunk apply) (bool,alternative,consequent) if lambda
          (begin (stStackSwapUnless state)
                 (stStackDrop state)
+                (stStackThunk state)
                 (stApply state)))
         ((symbol-elm? item)
          (stStackPush state item))
@@ -911,12 +934,16 @@
 
 (define myState (mkEmptyState))
 
-(stEnvUpdateBinding myState (cons '+ (mkPrimBinding '+ 2)))
-(stEnvUpdateBinding myState (cons '* (mkPrimBinding '* 2)))
-(stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
-(stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
-(stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
-(stEnvUpdateBinding myState (cons 'eq? (mkPrimBinding 'eq? 2)))
+((applyMap myState) '(3.141592653589793238462643 *pi define))
+
+((applyMap myState) '(2 + primitive))
+((applyMap myState) '(2 - primitive))
+((applyMap myState) '(2 / primitive))
+((applyMap myState) '(2 * primitive))
+((applyMap myState) '(2 cons primitive))
+((applyMap myState) '(2 eq? primitive))
+((applyMap myState) '(2 expt primitive))
+((applyMap myState) '(1 sqrt primitive))
 
 (define (add-cxrs state n)
   (letrec ((nums (take n '(1 2 4 8 16)))
@@ -943,7 +970,6 @@
 (add-cxrs myState 2)
 (add-cxrs myState 1)
 
-(stEnvUpdateBinding myState (cons 'inc (mkLambda '(a a +) '(a) (stGetEnv myState))))
 (stEnvUpdateBinding myState (cons 'nil '()))
 
 ; ###############
