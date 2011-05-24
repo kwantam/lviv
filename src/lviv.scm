@@ -23,6 +23,25 @@
 ; **** MISC ****
 ; **************
 
+; foldl
+; like the Haskell function
+; foldl1 :: (a->b->a) -> a -> [b] -> a
+(define (foldl f init ls)
+  (if (null? ls)
+    init
+    (foldl f (f init (car ls)) (cdr ls))))
+
+; zipWith
+; like the Haskell function
+; zipWith func l1 l2
+(define (zipWith f l1 l2)
+  (cond ((null? l1) '())
+        ((null? l2) '())
+        (else (cons (f (car l1) (car l2))
+                    (zipWith f (cdr l1) (cdr l2))))))
+; zip = zipWith cons
+(define (zip l1 l2) (zipWith cons l1 l2))
+
 ; string-contains    s1 s2 [start1 end1 start2 end2] -> integer or false
 ; string-contains-ci s1 s2 [start1 end1 start2 end2] -> integer or false
 ;     Does string s1 contain string s2?
@@ -373,7 +392,9 @@
       ((stackOp? 'define stDefine) op)
       ((stackOp? 'eval stEval) op)
       ((stackOp? 'apply stApply) op)
-      ((stackOp? 'thunk stStackThunk) op)))
+      ((stackOp? 'thunk stStackThunk) op)
+      ((stackOp? 'lambda stLambda) op)
+      ))
 
 ; #############
 ; #### ENV #### 
@@ -426,6 +447,9 @@
 (define (envAddBinding env item)
   (envSetBindings env (cons item (envBindings env))))
 
+(define (envAddMany env items)
+  (foldl envAddBinding env items))
+
 ; update or insert binding into env
 (define (envUpdateBinding env item)
   (letrec ((updateHlp
@@ -460,7 +484,9 @@
            (delay (cons fnId
                         (fromLeftRight (force fnVal))))))
     (cond ((eLeft? fnIdE) fnIdE)
-          ((not (or (static-symbol-elm? fnId) (symbol? fnId) (auto-symbol-elm? fnId)))
+          ((not (or (static-symbol-elm? fnId)
+                    (quote-symbol-elm? fnId)
+                    (auto-symbol-elm? fnId)))
            (rewind state (list fnId) "invalid identifier"))
           ((eLeft? (force fnVal))
            (rewind state (list fnId) (fromLeftRight (force fnVal))))
@@ -469,9 +495,36 @@
              (envUpdateBinding (static-symbol-env fnId)
                                (force saEnvItem))))
           ((auto-symbol-elm? fnId)
-           (eRight (stEnvUpdateBinding myState (force saEnvItem))))
+           (eRight (stEnvUpdateBinding state (force saEnvItem))))
           (else
-           (eRight (stEnvUpdateBinding myState (force envItem)))))))
+           (eRight (stEnvUpdateBinding state (force envItem)))))))
+
+(define (stLambda state)
+  (let* ((fnLArgs (stStackNPop state 3))
+         (fnId (caddr (fromLeftRight fnLArgs)))
+         (fnArgs (cadr (fromLeftRight fnLArgs)))
+         (fnxCode (car (fromLeftRight fnLArgs)))
+         (fnCode 
+           (if (list? fnxCode) fnxCode (force fnxCode)))
+         (fnLambda
+           (lambda (env) (mkLambda fnCode fnArgs env))))
+    (cond ((eLeft? fnLArgs) fnLArgs)
+          ((not (or (static-symbol-elm? fnId)
+                    (quote-symbol-elm? fnId)
+                    (auto-symbol-elm? fnId)))
+           (rewind state (reverse (fromLeftRight fnLArgs)) "invalid identifier"))
+          ((static-symbol-elm? fnId)
+           (eRight
+             (envUpdateBinding (static-symbol-env fnId)
+                               (cons (static/auto-symbol-sym fnId)
+                                     (fnLambda (static-symbol-env fnId))))))
+          ((auto-symbol-elm? fnId)
+           (eRight
+             (stEnvUpdateBinding state (cons (static/auto-symbol-sym fnId)
+                                             (fnLambda (stGetEnv state))))))
+          (else
+            (eRight
+              (stEnvUpdateBinding state (cons fnId (fnLambda (stGetEnv state)))))))))
 
 ; ############################
 ; #### EXCEPTION HANDLING ####
@@ -589,15 +642,50 @@
        (pair? (car x))
        (eq? lviv-tag (caar x))))
 
+; make a lambda to stick in the env
+(define (mkLambda code args env)
+  (list (mklvivtag 'lambda) args code (object->serial-number env) #f))
+(define (lambda? obj)
+  (and (pair? obj) (list? obj) (equal? (car obj) (mklvivtag 'lambda)) (= (length obj) 5)))
+; reverse order of application
+(define (lambda-reverse binding)
+  (if (lambda? binding)
+    (reverse (cons (not (lambda-reverse? binding))
+                   (cdr (reverse binding))))))
+(define (lambda-reverse? x) (list-ref x 4))
+(define lambda-args cadr)
+(define lambda-code caddr)
+(define (lambda-env obj) (serial-number->object (car (cdddr obj))))
+
+(define (stLambdaCall state binding)
+  (let* ((rfunc (if (lambda-reverse? binding) values reverse))
+         (fnArgNames (lambda-args binding))
+         (fnNArgs (length fnArgNames))
+         (fnArgs (delay (stStackNPop state fnNArgs)))
+         (lambdaState
+           (delay (cons (stGetStack state)
+                        (cons (zip fnArgNames (rfunc (fromLeftRight (force fnArgs))))
+                              (lambda-env binding)))))
+         (fnCompResult
+           (lambda ()
+             (eRight ((applyMap (force lambdaState))
+                      (lambda-code binding)))))
+         (fnResult (delay (with-exception-catcher
+                            (exceptionHandler #f)
+                            fnCompResult))))
+    (cond ((eLeft? (force fnArgs)) (force fnArgs))
+          ((eLeft? (force fnResult))
+           (rewind state
+                   (reverse (fromLeftRight (force fnArgs)))
+                   (fromLeftRight (force fnResult))))
+          (else (begin (stUpdateStack
+                         state
+                         (stGetStack (force lambdaState)))
+                       (force fnResult))))))
+
 ; make a primitive binding to stick in the env
 (define (mkPrimBinding id arity)
   (list (mklvivtag 'primitive) arity id #f))
-
-; make a primitive binding that causes its arguments
-; to be applied in reverse
-; `:func` is the reverse version of `:func`
-(define (mkRPrimBinding id arity)
-  (list (mklvivtag 'primitive) arity id #t))
 
 (define (prim-reverse binding)
   (if (primitive? binding)
@@ -610,7 +698,7 @@
 (define primitive-id caddr)
 (define primitive-reverse? cadddr)
 (define (primitive? obj)
-  (and (list? obj) (equal? (car obj) (mklvivtag 'primitive)) (= (length obj) 4)))
+  (and (pair? obj) (list? obj) (equal? (car obj) (mklvivtag 'primitive)) (= (length obj) 4)))
 
 ; primitive call
 (define (stPrimCall state binding)
@@ -643,22 +731,17 @@
 ; variable references get resolved and lists get applied as syntax
 (define (stEval state)
   (let* ((fnEArg (stStackPop state))
-         (fnArg (fromLeftRight fnEArg))
-         (lookupPush
-           (lambda (env name)
-             (let ((lkRef (envLookupBinding env name)))
-               (if (eLeft? lkRef)
-                 (eLeft "lookup failed")
-                 (stStackPush state (fromLeftRight lkRef)))))))
-    (cond ((eLeft? fnEArg) fnEArg)                                                  ; pop failed
-          ((static-symbol-elm? fnArg) (lookupPush (caddr fnArg) (cadr fnArg)))      ; lookup static
-          ((auto-symbol-elm? fnArg) (lookupPush (stGetEnv state) (cadr fnArg)))     ; lookup auto
-          ((quote-symbol-elm? fnArg)
-           (stStackPush state (lviv-eval state fnArg)))                             ; handle like the literal was just typed in
-          ((posn-symbol-elm? fnArg) (rewind state (list fnArg) "not implemented"))  ; haven't done positionals yet
-          ((lviv-tagged? fnArg) (stStackPush state fnArg))                          ; idempotent through eval
-          ((list? fnArg) (map (lambda (item) (lviv-apply state item)) fnArg))       ; apply as if typed in
-          (else (stStackPush state (lviv-eval state fnArg))))))                     ; else assume it's idempotent
+         (fnArg (fromLeftRight fnEArg)))
+    (if (eLeft? fnEArg)
+      fnEArg
+      (stStackPush state (lviv-eval state fnArg)))))
+
+; apply a thunk
+(define (applyMap state)
+  (lambda (elm)
+  (map (lambda (x) 
+         (lviv-apply state (lviv-eval state x)))
+       elm)))
 
 ; since lviv-apply always works on AST, stApply and lviv-apply are
 ; basically identical, but we have to wrap a safe pop around the
@@ -668,8 +751,8 @@
          (fnArg (fromLeftRight fnEArg)))
     (cond ((eLeft? fnEArg) fnEArg)              ; pop unsuccessful?
           ((thunkElm? fnArg)                    ; thunk?
-           (begin (stStackPush state (thunkElm->elm fnArg)) ; unwrap
-                  (stEval state)))                          ; eval
+           ((applyMap state)                    ; apply as if just typed in
+            (thunkElm->elm fnArg)))
           (else (lviv-apply state fnArg)))))    ; otherwise, just apply it like anything else
 
 ; ###############
@@ -733,57 +816,73 @@
   (and (pair? op) (equal? (mklvivtag 'stackop) (car op)) (procedure? (cdr op))))
 (define stackOpElm->stackop cdr)
 
-(define (mkThunkElm op) (cons (mklvivtag 'thunk) op))
+(define (mkThunkElm op)
+  (cons (mklvivtag 'thunk)
+        (if (list? op)
+          op
+          (list op))))
 (define (thunkElm? op)
   (and (pair? op) (equal? (mklvivtag 'thunk) (car op))))
 (define thunkElm->elm cdr)
 
 (define (lviv-eval state item)
-  (cond ((eq? item 'nop) item) ; nop is same in the AST
-        ((eq? item 'env) item) ; env is same in the AST
-        ((eq? item 'if) item)
-        ((static-symbol? item) ; &foo -> (& foo env)
-         (mkStaticSymbolElm (static-symbol->symbol item)
-                            (stGetEnv state)))
-        ((auto-symbol? item)   ; @foo -> (@ foo)
-         (mkAutoSymbolElm (auto-symbol->symbol item)))
-        ((posn-symbol? item)   ; !1   -> (! 1)
-         (mkPosnRefElm (posn-symbol->symbol item)))
-        ((quote-symbol? item)  ; *bar -> bar
-         (quote-symbol->symbol item))
-        ((stStackOp? item) (mkStackOpElm (stStackOp? item))) ; primitive stack op
-        ((reverse-symbol? item) ; :cons -> cons in reverse
-         (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
-                (iBind (fromLeftRight iLBind)))
-           (cond ((eLeft? iLBind) iLBind)
-                 ((primitive? iBind) (prim-reverse iBind))
-                 (else (eLeft "cannot reverse non-op")))))
-        ((symbol? item)        ; look up symbol in present env
-         (let ((iLBind (stEnvLookupBinding state item)))
-           (if (eLeft? iLBind) ; did lookup succeed?
-             (mkAutoSymbolElm item) ; no---make auto symbol
-             (fromLeftRight iLBind)))) ; yes---pass it on
-        ((list? item)
-         (map (lambda (x) (lviv-eval state x)) item))
-        ((pair? item)
-         (cons (lviv-eval state (car item))
-               (lviv-eval state (cdr item))))
-        (else item)))
+  (let ((lookupElm (lambda (env name)
+                     (let ((lkRef (envLookupBinding env name)))
+                       (if (eLeft? lkRef)
+                         (eLeft "lookup failed")
+                         (fromLeftRight lkRef))))))
+    (cond ((eq? item 'nop) item) ; nop is same in the AST
+          ((eq? item 'env) item) ; env is same in the AST
+          ((eq? item 'if) item)
+          ((static-symbol? item) ; &foo -> (& foo env)
+           (mkStaticSymbolElm (static-symbol->symbol item)
+                              (stGetEnv state)))
+          ((auto-symbol? item)   ; @foo -> (@ foo)
+           (mkAutoSymbolElm (auto-symbol->symbol item)))
+          ((posn-symbol? item)   ; !1   -> (! 1)
+           (mkPosnRefElm (posn-symbol->symbol item)))
+          ((quote-symbol? item)  ; *bar -> bar
+           (quote-symbol->symbol item))
+          ((stStackOp? item) (mkStackOpElm (stStackOp? item))) ; primitive stack op
+          ((static-symbol-elm? item) (lookupElm (caddr item) (cadr item)))
+          ((auto-symbol-elm? item) (lookupElm (stGetEnv state) (cadr item)))
+          ((posn-symbol-elm? item) (eLeft "not implemented"))
+          ((reverse-symbol? item) ; :cons -> cons in reverse
+           (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
+                  (iBind (fromLeftRight iLBind)))
+             (cond ((eLeft? iLBind) iLBind)
+                   ((primitive? iBind) (prim-reverse iBind))
+                   (else (eLeft "cannot reverse non-op")))))
+          ((symbol? item)        ; look up symbol in present env
+           (let ((iLBind (stEnvLookupBinding state item)))
+             (if (eLeft? iLBind) ; did lookup succeed?
+               (mkAutoSymbolElm item) ; no---make auto symbol
+               (fromLeftRight iLBind)))) ; yes---pass it on
+          ((lviv-tagged? item) item)
+          ((and (list? item) (pair? item))
+           (map (lambda (x) (lviv-eval state x)) item))
+          ((pair? item)
+           (cons (lviv-eval state (car item))
+                 (lviv-eval state (cdr item))))
+          (else item))))
 
 (define (lviv-apply state item)
   ((lambda (result) (if (eLeft? result) (stackError result) result))
   (cond ((eq? item 'nop) (eRight '())) ; nop does nothing
         ((eq? item 'env) ; env will show the present environment
-         (eRight (pp (stGetEnv state)) (newline)))
+         (begin (pp (stGetEnv state))
+                (newline)
+                (eRight '())))
         ((eLeft? item) item)
         ((eq? item 'if)
-         (begin (stStackSwapUnless myState)
-                (stStackDrop myState)
-                (stEval myState)))
+         (begin (stStackSwapUnless state)
+                (stStackDrop state)
+                (stApply state)))
         ((symbol-elm? item)
          (stStackPush state item))
         ((stackOpElm? item) ((stackOpElm->stackop item) state))
         ((primitive? item) (stPrimCall state item))
+        ((lambda? item) (stLambdaCall state item))
         (else (stStackPush state item))))) ; else just push it on the stack
 
 (define (lviv-repl state input)
@@ -792,8 +891,8 @@
     (begin 
       (if (string? input)
         (with-exception-catcher (exceptionHandler #t) (lambda ()
-        (map (lambda (x) (lviv-apply state (lviv-eval state x)))
-             (call-with-input-string input read-all)))))
+        ((applyMap state)
+         (call-with-input-string input read-all)))))
       (lviv-ppstack (stGetStack state) (stEnvLookupBinding state '_stack_display_depth))
       (display "> ")
       (lviv-repl state (read-line)))))
@@ -817,7 +916,6 @@
 (stEnvUpdateBinding myState (cons '- (mkPrimBinding '- 2)))
 (stEnvUpdateBinding myState (cons '/ (mkPrimBinding '/ 2)))
 (stEnvUpdateBinding myState (cons 'cons (mkPrimBinding 'cons 2)))
-(stEnvUpdateBinding myState (cons 'rcons (mkRPrimBinding 'cons 2)))
 (stEnvUpdateBinding myState (cons 'eq? (mkPrimBinding 'eq? 2)))
 
 (define (add-cxrs state n)
@@ -845,6 +943,8 @@
 (add-cxrs myState 2)
 (add-cxrs myState 1)
 
+(stEnvUpdateBinding myState (cons 'inc (mkLambda '(a a +) '(a) (stGetEnv myState))))
+(stEnvUpdateBinding myState (cons 'nil '()))
 
 ; ###############
 ; #### TESTS ####
@@ -991,12 +1091,12 @@
 (display (stEnvLookupBinding myState 'd)) (newline)
 (display (stEnvLookupBinding myState 'b)) (newline)
 
-(display myState) (newline)
+;(display myState) (newline)
 (stEnvParent myState)
 (stEnvParent myState)
 (stEnvParent myState)
 (stEnvParent myState)
-(display myState) (newline)
+;(display myState) (newline)
 
 (test (stGlobalEnv? myState) "should be global env here")
 
@@ -1016,7 +1116,7 @@
 
 (lviv-apply myState (lviv-eval myState '@b))
 (lviv-apply myState (lviv-eval myState '@a))
-(display myState) (newline)
+;(display myState) (newline)
 
 (test (eLeft? 
         (with-exception-catcher (exceptionHandler #f)
@@ -1026,7 +1126,7 @@
       "stack is in wrong state after type failure")
 (testLookup 'cdr (mkPrimBinding 'cdr 1))
 
-(display myState) (newline)
+;(display myState) (newline)
 
 (lviv-repl myState #f)
 
