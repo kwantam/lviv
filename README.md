@@ -204,9 +204,9 @@ Tuples in lviv can also be constructed using `cons`. A tuple is simply an unterm
 
 `define` binds the identifier in the 0th position on the stack with the value in the 1st in the containing environment. If the identifier is a static variable, the binding is placed in the attached environment. Otherwise, the binding is placed in the current environment.
 
-Identifiers can contain alphanumerics or any of `! $ % & * + - . / : < = > ? @ ^ _ ~`, but must begin with a character that cannot begin a number and is not otherwise reserved (i.e., any valid character other than `. + - & @`).
+Identifiers can contain alphanumerics or any of `! $ % & * + - . / : < = > ? @ ^ _ ~`, but must begin with a character that cannot begin a number and is not otherwise reserved (i.e., any valid character other than `. + - & * !`).
 
-When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `*` sigil can be used. The `&` sigil indicates that the variable is statically bound in enclosing environment (Scheme-style static scope), whereas the `*` prefix simply places the identifier on the stack, leaving its binding to an environment until evaluation.
+When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `*` sigil can be used. The `&` sigil indicates that the variable is statically bound in enclosing environment, whereas the `*` prefix simply places the identifier on the stack, leaving its binding to an environment until evaluation.
 
     > 1 *z define
     > 2 z
@@ -215,7 +215,7 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     > :-
     1
     > (&z +) :cons thunk
-	#<thunk ( 1 &z + )>
+    #<thunk ( 1 &z + )>
     > 2 z define
     #<thunk ( 1 &z + )>
     > apply
