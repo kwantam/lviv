@@ -163,6 +163,11 @@
                                  (display (primitive-id elm))
                                  (display ">")
                                  (newln)))
+                         ((and (list? elm) (pair? elm))
+                          (begin (display "( ")
+                                 (map (lpp #f) elm)
+                                 (display " )")
+                                 (newln)))
                          (else
                            (begin (display elm)
                                   (newln)))))))))

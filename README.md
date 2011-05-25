@@ -22,7 +22,7 @@ If you've used an HP calculator, you're probably familiar with how RPN works. Ex
 
 ### Order of application
 
-By default, RPN operations are still applied in conventional order: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5. This seems somewhat logical for a calculator, since it matches our intuition for the basic noncommutative arithmetic operations.
+By convention, RPN operations are applied in conventional order: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5. This seems somewhat logical for a calculator, since it matches our intuition for the basic noncommutative arithmetic operations.
 
 Unfortunately, this order seems (to me) pretty clunky when recursively applying operations that consume and return multiple values. In this context, it seems more sensible to think of function application as repeatedly applying stack values to a curried function until it returns a value. (lviv functions are not automatically curried like Haskell functions, so perhaps one could succesfully argue that I only think this way because I write too much Haskell.)
 
@@ -215,9 +215,9 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     > :-
     1
     > (&z +) :cons thunk
-	#<thunk (1 &z +)>
+	#<thunk ( 1 &z + )>
     > 2 z define
-    #<thunk (1 &z +)>
+    #<thunk ( 1 &z + )>
     > apply
     3
 
@@ -235,7 +235,11 @@ Unbound identifiers (invoked with `*`) have no binding when they are put on the 
 
 ### `eval` and `apply`
 
-`eval` evaluates the top entry on the stack. Variables are dereferenced, but most other expressions are idempotent. In LISP, evaluating a list results in a computation as if that list were typed in as code. In lviv, lists do not represent a fundamental unit of computation, so evaluating a list merely dereferences the enclosed variables. To cause the contents to be computed as if entered, a list must be turned into a thunk and then applied using `apply`.
+`eval` evaluates the top entry on the stack. Variables are dereferenced, but most other expressions are idempotent.
+
+In LISP, evaluating a list results in a computation as if that list were typed in as code. In lviv, lists do not represent a fundamental unit of computation, so evaluating a list merely dereferences the enclosed variables. Similarly, application in LISP combines a list of arguments with a function. In lviv, all application involves an element interacting with the stack. If the element is a function, its application involves popping arguments and pushing results. Otherwise, the application of an element to the stack simply results in that element being pushed onto the stack.
+
+To cause its contents to be computed as if entered at the prompt, a list must be turned into a thunk and then applied using `apply`. Alternatively, it can be turned into a lambda with an empty argument list and then applied. The fundamental difference between a lambda and a thunk is that the latter is bound to an environment when applied, whereas the former is bound to an environment when created.
 
     > 1 eval
     1
@@ -279,11 +283,11 @@ thunks are a special case for `apply`; see below.
 lviv represents explicitly delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
 
 	> (1 *z +) thunk
-	#<thunk (1 z +)>
+	#<thunk ( 1 z + )>
 	> eval
-	#<thunk (1 z +)>
+	#<thunk ( 1 z + )>
 	> dup 2 *z define apply
-	#<thunk (1 z +)>
+	#<thunk ( 1 z + )>
 	3
 	> 15 + *z define apply
 	19
@@ -299,11 +303,11 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
     1
     > (!0 1 +) thunk
     1
-    #<thunk (!0 1 +)>
+    #<thunk ( !0 1 + )>
     > 2 swap
     1
     2
-    #<thunk (!0 1 +)>
+    #<thunk ( !0 1 + )>
     > eval
     1
     3
@@ -325,17 +329,17 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
 
 ### Lambdas
 
-`lambda` combines a thunk and a positional binding list into a function. Positional identifiers cannot be used with a `lambda`.
+`lambda` combines a delayed computation and a binding list into a function. Positional identifiers cannot be used with a `lambda`.
 
-Positional binding lists map variables inside the thunk to positional references on the stack. List elements are numbered from left to right starting at 0. lambdas
+Binding lists map variables inside the thunk to positions on the stack at application time. List elements are numbered from left to right starting at 0.
 
     > *x
     x
     > (1 +) :cons
-	(x 1 +)
-    > (y *) :append
-	(x 1 + y *)
-    > (*y *x) *xyfunc lambda
+	( x 1 #<primitive +> )
+    > (*y *) :append
+	( x 1 #<primitive +> y #<primitive *> )
+    > (*y *x) lambda *xyfunc define
     > 2 1
     2
     1
@@ -344,35 +348,34 @@ Positional binding lists map variables inside the thunk to positional references
     > 2 *xyfunc eval
 	3
 	2
-	#<lambda xyfunc>
+	#<lambda ( x 1 #<primitive +> y #<primitive *> ) ( y x )>
 	> apply
 	8
 
 The above lambda is equivalent to
 
     > (swap 1 + swap *) thunk
-    #<thunk (swap 1 + swap *)>
+    #<thunk ( #<stackOp swap> 1 #<primitive +> #<stackOp swap> #<primitive *> )>
     > 2 1 3 roll
     2
     1
-    #<thunk (swap 1 + swap *)>
+    #<thunk ( #<stackOp swap> 1 #<primitive +> #<stackOp swap> #<primitive *> )>
     > apply
     3
 
-### `let` TODO
+### `let` *TODO*
 
-`let` is similar to `lambda`: it takes a thunk and a binding list. `let` is evaluated immediately and the result of the evaluation is pushed onto the stack. If the `let` expression contains unbound variables after evaluation, its result is a thunk.
-
-The `let` expression uses a named binding list rather than a positional binding list. A named binding list is a list of tuples which are bound sequentially and then evaluated. In this way, `let` behaves much like Scheme's `letrec`: variables inside the named binding list may reference other variables in the list whether they are bound before or after. Like the `lambda`, automatically scoped variables in the thunk and the RHS of the named binding tuples that correspond to identifiers in the named binding list become lexically scoped to the `let`. This means that named bindings need not shadow variables in enclosing environments, since lexical bindings can be passed in.
+`let` is similar to `lambda`: it combines a delayed computation and a binding list. `let` is evaluated immediately and the result of the evaluation is pushed onto the stack.
 
     > 2 a define
-    --> a : 2
-    > { &a a b + * } [(a,1),(b,a &a +)] let
+    > ( &a a b + * ) ( ( a . 1 ) ( b . ( a &a + ) ) ) let
     8
-    > z +
-    #<thunk { 8 @z + }>
-    > a * [(a,1)] let
-    #<thunk { 8 &z + 1 * }>
+    > 6 *z define
+    8
+    > (*z +) :cons
+    ( 8 z + )
+    > (*a *) :append ( (a . 1) ) let
+    14
 
 ### `<consequent> <alternative> <test> if`, `<consequent> <alternative> <test> unless`
 
@@ -391,20 +394,20 @@ The first example above illustrates that only one of the consequent or alternati
 
 `unless` is equivalent to `swapIf drop thunk apply`.
 
-### `cond` TODO
+### `cond` *TODO*
 
 ## Other operations
 
-### exception handling TODO
+### exception handling *TODO*
 
 
-### `tstk`, `untstk`, and `rtstk` TODO
+### `tstk`, `untstk`, and `rtstk` *TODO*
 
 `tstk` moves aside the present stack and replaces it with an empty temporary stack. `untstk` removes the temporary stack and restores the previous one. `rtstk` pops the 0th value off the temporary stack, restores the previous stack, and pushes this value.
 
 `tstk` calls can be nested; each `untstk` or `rtstk` ascends one level of nesting.
 
-### namespacing TODO
+### namespacing *TODO*
 
     > :: namespace
     --> namespace : ::
@@ -423,8 +426,7 @@ The first example above illustrates that only one of the consequent or alternati
     > ::foo::bar::y
     2
 
-### named stacks
-###### probably YAGNI
+### named stacks *TODO*
 
     > __ stack
     --> stack : __
