@@ -27,18 +27,19 @@
 ; rather than via lviv wrapped in scheme calls (but of course
 ; file reading will have to be implemented first!)
 
-(define myState (mkEmptyState))
+(define lvivState (mkEmptyState))
 
-((applyMap myState) '(3.141592653589793238462643 *pi define))
+((applyMap lvivState) '(3.141592653589793238462643 *pi define))
 
-((applyMap myState) '(2 + primitive))
-((applyMap myState) '(2 - primitive))
-((applyMap myState) '(2 / primitive))
-((applyMap myState) '(2 * primitive))
-((applyMap myState) '(2 cons primitive))
-((applyMap myState) '(2 eq? primitive))
-((applyMap myState) '(2 expt primitive))
-((applyMap myState) '(1 sqrt primitive))
+((applyMap lvivState) '(2 + primitive + define))
+((applyMap lvivState) '(2 - primitive - define))
+((applyMap lvivState) '(2 / primitive / define))
+((applyMap lvivState) '(2 * primitive * define))
+((applyMap lvivState) '(2 cons primitive cons define))
+((applyMap lvivState) '(2 eq? primitive eq? define))
+((applyMap lvivState) '(2 expt primitive expt define))
+((applyMap lvivState) '(1 sqrt primitive sqrt define))
+((applyMap lvivState) '(2 append primitive append define))
 
 (define (add-cxrs state n)
   (letrec ((nums (take n '(1 2 4 8 16)))
@@ -58,13 +59,13 @@
                    (acHlp (+ cnt 1)))))))
     (acHlp 0)))
 
-;(add-cxrs myState 5)
+;(add-cxrs lvivState 5)
 ;only defined up to 4 levels, not 5 as I'd previously believed
-(add-cxrs myState 4)
-(add-cxrs myState 3)
-(add-cxrs myState 2)
-(add-cxrs myState 1)
+(add-cxrs lvivState 4)
+(add-cxrs lvivState 3)
+(add-cxrs lvivState 2)
+(add-cxrs lvivState 1)
 
-(stEnvUpdateBinding myState (cons 'nil '()))
+(stEnvUpdateBinding lvivState (cons 'nil '()))
 
 

@@ -62,33 +62,28 @@
                        (if (eLeft? lkRef)
                          (eLeft "lookup failed")
                          (fromLeftRight lkRef))))))
-    (cond ((eq? item 'nop) item) ; nop is same in the AST
-          ((eq? item 'env) item) ; env is same in the AST
-          ((eq? item 'if) item)
-          ((static-symbol? item) ; &foo -> (& foo env)
+    (cond ((static-symbol? item) ; &foo -> (& foo env)
            (mkStaticSymbolElm (static-symbol->symbol item)
                               (stGetEnv state)))
-          ((auto-symbol? item)   ; @foo -> (@ foo)
-           (mkAutoSymbolElm (auto-symbol->symbol item)))
-          ((posn-symbol? item)   ; !1   -> (! 1)
-           (mkPosnRefElm (posn-symbol->symbol item)))
+; nyi     ;((posn-symbol? item)   ; !1   -> (! 1)
+; nyi     ; (mkPosnRefElm (posn-symbol->symbol item)))
           ((quote-symbol? item)  ; *bar -> bar
            (quote-symbol->symbol item))
-          ((stStackOp? item) (mkStackOpElm (stStackOp? item))) ; primitive stack op
-          ((static-symbol-elm? item) (lookupElm (caddr item) (cadr item)))
-          ((auto-symbol-elm? item) (lookupElm (stGetEnv state) (cadr item)))
-          ((posn-symbol-elm? item) (eLeft "not implemented"))
           ((reverse-symbol? item) ; :cons -> cons in reverse
            (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
                   (iBind (fromLeftRight iLBind)))
              (cond ((eLeft? iLBind) iLBind)
                    ((primitive? iBind) (prim-reverse iBind))
                    ((lambda? iBind) (lambda-reverse iBind))
-                   (else (eLeft "cannot reverse non-op")))))
+                   (else (eLeft "can only reverse lambda or primitive")))))
+          ((stStackOp? item) (mkStackOpElm (stStackOp? item))) ; stackOp
+          ((static-symbol-elm? item) (lookupElm (static-symbol-env item)
+                                                (static-symbol-sym item)))
+          ((posn-symbol-elm? item) (eLeft "not implemented"))
           ((symbol? item)        ; look up symbol in present env
            (let ((iLBind (stEnvLookupBinding state item)))
              (if (eLeft? iLBind) ; did lookup succeed?
-               (mkAutoSymbolElm item) ; no---make auto symbol
+               item ; no---make auto symbol
                (fromLeftRight iLBind)))) ; yes---pass it on
           ((lviv-tagged? item) item) ; all other lviv-tagged items are idempotent
           ((and (list? item) (pair? item)) ; has to be list and not nil
@@ -101,26 +96,11 @@
 ; apply the output from eval to the stack
 (define (lviv-apply state item)
   ((lambda (result) (if (eLeft? result) (stackError result) result))
-  (cond ((eq? item 'nop) (eRight '())) ; nop does nothing         **TODO make this a stackOp
-        ((eq? item 'env) ; env will show the present environment  **TODO make this a stackOp
-         (begin (pp (stGetEnv state))
-                (newline)
-                (eRight '())))
-        ((eLeft? item) item)
-        ((eq? item 'if) ; this is a really slow way of making an if, but it's OK for now
-         ; <consequent> <alternative> <boolean> if				  **TODO make this a stackOp
-         ; this could just be a 3-arg lambda:
-         ; (consequent alternative bool swapUnless drop thunk apply) (bool,alternative,consequent) if lambda
-         (begin (stStackSwapUnless state)
-                (stStackDrop state)
-                (stStackThunk state)
-                (stApply state)))
-        ((symbol-elm? item)
-         (stStackPush state item))
-        ((stackOpElm? item) ((stackOpElm->stackop item) state))
-        ((primitive? item) (stPrimCall state item))
-        ((lambda? item) (stLambdaCall state item))
-        (else (stStackPush state item))))) ; else just push it on the stack
+   (cond ((eLeft? item) item)
+         ((stackOpElm? item) ((stackOpElm->stackop item) state))
+         ((primitive? item) (stPrimCall state item))
+         ((lambda? item) (stLambdaCall state item))
+         (else (stStackPush state item))))) ; else just push it on the stack
 
 ; we use read-line rather than read so that we get all of the inputs at once,
 ; and don't end up printing the state of the stack between each element in
@@ -146,5 +126,4 @@
                  (fromLeftRight eDepth)
                  _stack_display_depth)))
     (map pp (reverse (take depth stack)))))
-
 

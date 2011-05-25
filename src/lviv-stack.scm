@@ -216,6 +216,31 @@
     (cons (eLeft "thunk: stack empty"))))
 (define (stStackThunk state) (stStackUpd2 stackThunk state))
 
+; if
+; <consequent> <alternative> <bool> if
+(define (stIf state)
+  (begin (stStackSwapUnless state)
+         (stStackDrop state)
+         (stStackThunk state)
+         (stApply state)))
+
+; unless
+; <consequent> <alternative> <bool> if
+(define (stUnless state)
+  (begin (stStackSwapIf state)
+         (stStackDrop state)
+         (stStackThunk state)
+         (stApply state)))
+
+; nop does nothing
+(define (stNop state) (eRight '()))
+
+; env prints out the environment
+(define (stEnv state)
+  (begin (pp (stGetEnv state))
+         (newline)
+         (eRight '())))
+
 (define (stackOp? symb f)
   (lambda (op) (if (eq? symb op) f #f)))
 
@@ -238,11 +263,17 @@
       ((stackOp? 'dropUnless stStackDropUnless) op)
       ((stackOp? 'uncons stStackUncons) op)
       ((stackOp? 'define stDefine) op)
+      ((stackOp? 'undefLocal (stUndef #t)) op)
+      ((stackOp? 'undef (stUndef #f)) op)
       ((stackOp? 'eval stEval) op)
       ((stackOp? 'apply stApply) op)
       ((stackOp? 'thunk stStackThunk) op)
       ((stackOp? 'lambda stLambda) op)
       ((stackOp? 'primitive stPrimitive) op)
+      ((stackOp? 'if stIf) op)
+      ((stackOp? 'unless stUnless) op)
+      ((stackOp? 'env stEnv) op)
+      ((stackOp? 'nop stNop) op)
       ))
 
 

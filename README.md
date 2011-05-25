@@ -28,10 +28,6 @@ Unfortunately, this order seems (to me) pretty clunky when recursively applying 
 
 By convention, all operations in lviv use reflected-prefix application order. However, functions can be applied in reverse by prepending them with `:`. Thus, `6 1 -` yields `-5`, but `6 1 :-` gives `5` as expected by someone used to an RPN calculator.
 
-#### `_stack_conventional` (TODO)
-
-If the `_stack_conventional` environment variable is `#t`, conventional order will be used by default (in which case `:` produces reflected-prefix ordering). Note that `_stack_conventional` is retrieved from the environment in the context of the present function application, so order can be inverted inside let or lambda constructs without corrupting other functions (or it can simply be set at the top of every program if you think I'm just being dumb).
-
 ## Stack operations
 
 The contents of the stack often represent most or all of the program's state. Thus, primitive stack operations underly most higher level operations in lviv.
@@ -168,7 +164,7 @@ lviv supports a full range of standard functional syntax.
 
 Lists in lviv should be familiar to LISP users. Formally, a list is defined either as the empty list (`nil` or `()`), or as the result of the `cons` operation on an element and a list. An element is anything that can be a stack entry.
 
-`car` and `cdr` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the tail and the head.
+`car` and `cdr` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the cdr, then the car.
 
 `(a (b c) d)`-like syntax can be used to create a list directly.
 
@@ -206,7 +202,7 @@ Tuples in lviv can also be constructed using `cons`. A tuple is simply an unterm
 
 #### `<val> <identifier> define`
 
-`define` binds the identifier in the 0th position on the stack with the value in the 1st in the containing environment.
+`define` binds the identifier in the 0th position on the stack with the value in the 1st in the containing environment. If the identifier is a static variable, the binding is placed in the attached environment. Otherwise, the binding is placed in the current environment.
 
 Identifiers can contain alphanumerics or any of `! $ % & * + - . / : < = > ? @ ^ _ ~`, but must begin with a character that cannot begin a number and is not otherwise reserved (i.e., any valid character other than `. + - & @`).
 
@@ -224,6 +220,12 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     #<thunk (1 &z +)>
     > apply
     3
+
+#### `<identifier> undef`, `<identifier> undefLocal`
+
+`undef` is used to delete a binding from the environment. If the identifier is a static variable, the binding is searched starting in the attached environment and removed if found. Otherwise, the search begins in the current environment.
+
+Note that undef will search from the present environment level all the way up to the top. To prevent the search from extending into the parent of the starting search environment, use `undefLocal` instead.
 
 #### Scope
 
@@ -306,6 +308,21 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
     1
     3
 
+### `<arity> <identifier> primitive`
+
+`primitive` is used to bind an underlying scheme operation into a lviv element. For example,
+
+    > 2 *expt primitive
+    #<primitive expt>
+    > 2 3 3 roll
+    2
+    3
+    #<primitive expt>
+    > apply
+    9
+    > 2 *expt primitive *expt define 2 :expt
+    81
+
 ### Lambdas
 
 `lambda` combines a thunk and a positional binding list into a function. Positional identifiers cannot be used with a `lambda`.
@@ -357,7 +374,7 @@ The `let` expression uses a named binding list rather than a positional binding 
     > a * [(a,1)] let
     #<thunk { 8 &z + 1 * }>
 
-### `<consequent> <alternative> <test> if`
+### `<consequent> <alternative> <test> if`, `<consequent> <alternative> <test> unless`
 
 `if` is actually just a short way of saying `swapUnless drop thunk apply`.
 
@@ -371,6 +388,8 @@ The `let` expression uses a named binding list rather than a positional binding 
 	2
 
 The first example above illustrates that only one of the consequent or alternative is applied as one would expect.
+
+`unless` is equivalent to `swapIf drop thunk apply`.
 
 ### `cond` TODO
 

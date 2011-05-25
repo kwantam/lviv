@@ -66,10 +66,10 @@
 (define static-symbol? (x-symbol? #\&))
 (define static-symbol->symbol (x-symbol->symbol static-symbol? "invalid static symbol"))
 (define (mkStaticSymbolElm symb env)
-  (list (mklvivtag '&) symb env))
+  (list (mklvivtag '&) symb (object->serial-number env)))
 (define static-symbol-elm? (x-symbol-elm? '& 3))
-(define static-symbol-env caddr)
-(define static/auto-symbol-sym cadr)
+(define (static-symbol-env symb) (serial-number->object (caddr symb)))
+(define static-symbol-sym cadr)
 
 ; position symbol functions
 (define posn-symbol? (x-symbol? #\!))
@@ -78,25 +78,17 @@
   (list (mklvivtag '!) n))
 (define posn-symbol-elm? (x-symbol-elm? '! 2))
 
-; auto symbol functions (get rid of these in favor of quote symbols, which are equivalent)
-(define auto-symbol? (x-symbol? #\@))
-(define auto-symbol->symbol (x-symbol->symbol auto-symbol? "invalid auto symbol"))
-(define (mkAutoSymbolElm symb)
-  (list (mklvivtag '@) symb))
-(define auto-symbol-elm? (x-symbol-elm? '@ 2))
-
 ; quote symbol functions
 (define quote-symbol? (x-symbol? #\*))
 (define quote-symbol->symbol (x-symbol->symbol quote-symbol? "invalid quote symbol"))
 (define quote-symbol-elm? symbol?)
 
-; is this symbol reversed? get rid of this in favor of _stack_conventional binding
+; is this symbol reversed?
 (define reverse-symbol? (x-symbol? #\:))
 (define reverse-symbol->symbol (x-symbol->symbol reverse-symbol? "invalid reverse symbol"))
 
 ; is this an element that can be used to define an environment variable?
 (define (symbol-elm? item) (or (static-symbol-elm? item)
-                               (auto-symbol-elm? item)
                                (quote-symbol-elm? item)))
 
 ; stackops in AST
@@ -121,7 +113,6 @@
 (define (lambda? obj)
   (and (list? obj) (= (length obj) 5) (equal? (car obj) (mklvivtag 'lambda))))
 ; reverse order of application
-; get rid of this in favor of the _stack_conventional env binding
 (define (lambda-reverse binding)
   (reverse (cons (not (lambda-reverse? binding)) (cdr (reverse binding)))))
 (define (lambda-reverse? x) (list-ref x 4))
@@ -134,7 +125,6 @@
   (list (mklvivtag 'primitive) arity id #f))
 
 ; change a binding to its reverse
-; get rid of this in favor of the _stack_conventional env binding
 (define (prim-reverse binding)
   (reverse (cons (not (primitive-reverse? binding)) (cdr (reverse binding)))))
 

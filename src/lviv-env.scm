@@ -55,18 +55,31 @@
   (lambda (state item) (f (stGetEnv state) item)))
 
 ; delete binding from env
-(define (envDelBinding env name)
-  (letrec ((delHlp
-             (lambda (bindings)
-               (cond ((null? (restBindings bindings)) #f)
-                     ((eq? name (car (firstBinding (restBindings bindings))))
-                      (setRestBindings bindings (rRestBindings bindings)))
-                     (else (delHlp (restBindings bindings)))))))
-    (cond ((null? (envBindings env)) #f)
-          ((eq? name (car (firstBinding (envBindings env))))
-           (envSetBindings env (restBindings (envBindings env))))
-          (else (delHlp (envBindings env))))))
-(define stEnvDelBinding (stEnvBindOp envDelBinding))
+(define (envDelBinding local?)
+  (lambda (env name)
+    (letrec ((delHlp
+               (lambda (bindings)
+                 (cond ((null? (restBindings bindings)) (eLeft "not found"))
+                       ((eq? name (car (firstBinding (restBindings bindings))))
+                        (begin
+                          (setRestBindings bindings (rRestBindings bindings))
+                          (eRight '())))
+                       (else (delHlp (restBindings bindings))))))
+             (delRes (delay (delHlp (envBindings env))))
+             (nextEnv (lambda () (if local?
+                                   (eLeft "not found")
+                                   ((envDelBinding #f) (envParent env) name)))))
+      ; this is weird
+      ; to make sure that the env is bound correctly, we have to
+      ; check the "next" one in the queue and re-link to the present spot
+      ; this means we have to do an initial lookahead
+      (cond ((null? env) (eLeft "not found"))
+            ((null? (envBindings env)) (nextEnv))
+            ((eq? name (car (firstBinding (envBindings env))))
+             (envSetBindings env (restBindings (envBindings env))))
+            ((eRight? (force delRes)) (force delRes))
+            (else (nextEnv))))))
+(define (stEnvDelBinding local?) (stEnvBindOp (envDelBinding local?)))
 
 ; insert an item into the environment
 ; does not check whether item is already there
@@ -109,8 +122,8 @@
   (let* ((fnIdE (stStackPop state))
          (fnId (fromLeftRight fnIdE))
          (fnVal (delay (stStackPop state)))
-         (saEnvItem
-           (delay (cons (static/auto-symbol-sym fnId)
+         (stEnvItem
+           (delay (cons (static-symbol-sym fnId)
                         (fromLeftRight (force fnVal)))))
          (envItem
            (delay (cons fnId
@@ -123,11 +136,26 @@
           ((static-symbol-elm? fnId)
            (eRight
              (envUpdateBinding (static-symbol-env fnId)
-                               (force saEnvItem))))
-          ((auto-symbol-elm? fnId)
-           (eRight (stEnvUpdateBinding state (force saEnvItem))))
+                               (force stEnvItem))))
           (else
            (eRight (stEnvUpdateBinding state (force envItem)))))))
+
+; undefine a variable
+; if it's a static symbol, undef it in its environment
+; otherwise, start from the present environment level
+; and search downwards
+(define (stUndef local?)
+  (lambda (state)
+    (let* ((fnIdE (stStackPop state))
+           (fnId (fromLeftRight fnIdE)))
+      (cond ((eLeft? fnIdE) fnIdE)
+            ((not (symbol-elm? fnId))
+             (rewind state (list fnId) "invalid identifier"))
+            ((static-symbol-elm? fnId)
+             (envDelBinding (static-symbol-env fnId)
+                            (static-symbol-sym fnId)))
+            (else
+              ((stEnvDelBinding local?) state fnId))))))
 
 ; as above, but creates a lambda and
 ; puts it into the environment.
@@ -137,8 +165,7 @@
 ; the environment? otherwise, we're replicating
 ; code unnecessarily
 (define (stLambda state)
-  (let* ((fnLArgs (stStackNPop state 3))
-         (fnId (delay (caddr (fromLeftRight fnLArgs))))
+  (let* ((fnLArgs (stStackNPop state 2))
          (fnArgs (delay (cadr (fromLeftRight fnLArgs))))
          (fnxCode (delay (car (fromLeftRight fnLArgs))))
          (fnCode 
@@ -147,22 +174,12 @@
                (force fnxCode)
                (list (force fnxCode)))))
          (fnLambda
-           (lambda (env) (mkLambda (force fnCode) (force fnArgs) env))))
+           (delay (mkLambda (force fnCode)
+                            (force fnArgs)
+                            (stGetEnv state)))))
     (cond ((eLeft? fnLArgs) fnLArgs)
-          ((not (symbol-elm? (force fnId)))
-           (rewind state (reverse (fromLeftRight fnLArgs)) "invalid identifier"))
-          ((static-symbol-elm? (force fnId))
-           (eRight
-             (envUpdateBinding (static-symbol-env (force fnId))
-                               (cons (static/auto-symbol-sym (force fnId))
-                                     (fnLambda (static-symbol-env (force fnId)))))))
-          ((auto-symbol-elm? (force fnId))
-           (eRight
-             (stEnvUpdateBinding state (cons (static/auto-symbol-sym (force fnId))
-                                             (fnLambda (stGetEnv state))))))
           (else
-            (eRight
-              (stEnvUpdateBinding state (cons (force fnId) (fnLambda (stGetEnv state)))))))))
+            (eRight (stStackPush state (force fnLambda)))))))
 
 ; as above, but creates a primitive binding.
 ; Seems like this should also create a primitive binding
@@ -173,23 +190,8 @@
   (let* ((fnLArgs (stStackNPop state 2))
          (fnId (delay (cadr (fromLeftRight fnLArgs))))
          (fnArity (delay (car (fromLeftRight fnLArgs))))
-         (fnBinding (lambda (id) (mkPrimBinding id (force fnArity))))
-         (saSym (delay (static/auto-symbol-sym (force fnId)))))
+         (fnBinding (delay (mkPrimBinding (force fnId)
+                                          (force fnArity)))))
     (cond ((eLeft? fnLArgs) fnLArgs)
-          ((not (symbol-elm? (force fnId)))
-           (rewind state (reverse (fromLeftRight fnLArgs)) "invalid identifier"))
-          ((static-symbol-elm? (force fnId))
-           (eRight
-             (envUpdateBinding (static-symbol-env (force fnId))
-                               (cons (force saSym)
-                                     (fnBinding (force saSym))))))
-          ((auto-symbol-elm? (force fnId))
-           (eRight
-             (stEnvUpdateBinding state (cons (force saSym)
-                                             (fnBinding (force saSym))))))
-          (else
-            (eRight
-              (stEnvUpdateBinding state (cons (force fnId)
-                                              (fnBinding (force fnId)))))))))
-
-
+          (else (eRight (stStackPush state 
+                                     (force fnBinding)))))))
