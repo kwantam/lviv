@@ -63,12 +63,11 @@
                          (eLeft "lookup failed")
                          (fromLeftRight lkRef))))))
     (cond ((static-symbol? item) ; &foo -> (& foo env)
-           (mkStaticSymbolElm (static-symbol->symbol item)
-                              (stGetEnv state)))
+           (mkStaticSymbolElm item (stGetEnv state)))
 ; nyi     ;((posn-symbol? item)   ; !1   -> (! 1)
-; nyi     ; (mkPosnRefElm (posn-symbol->symbol item)))
+; nyi     ; (mkPosnRefElm item))
           ((quote-symbol? item)  ; *bar -> bar
-           (quote-symbol->symbol item))
+           (mkQuoteSymbolElm item))
           ((reverse-symbol? item) ; :cons -> cons in reverse
            (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
                   (iBind (fromLeftRight iLBind)))

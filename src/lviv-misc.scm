@@ -76,19 +76,19 @@
       (else                  ; matching a pattern of at least two chars
         (let outer ((pos 0))
           (cond
-            ((> pos search-span) #f)	; nothing was found thru the whole str
+            ((> pos search-span) #f)    ; nothing was found thru the whole str
             ((not (char=? c1 (string-ref str pos)))
-             (outer (+ 1 pos)))	; keep looking for the right beginning
+             (outer (+ 1 pos)))    ; keep looking for the right beginning
             ((not (char=? c2 (string-ref str (+ 1 pos))))
-             (outer (+ 1 pos)))	; could've done pos+2 if c1 == c2....
-            (else                  	; two char matched: high probability
+             (outer (+ 1 pos)))    ; could've done pos+2 if c1 == c2....
+            (else                      ; two char matched: high probability
               ; the rest will match too
               (let inner ((i-pat 2) (i-str (+ 2 pos)))
                 (if (>= i-pat pat-len) pos ; whole pattern matched
                   (if (char=? (string-ref pattern i-pat)
                               (string-ref str i-str))
                     (inner (+ 1 i-pat) (+ 1 i-str))
-                    (outer (+ 1 pos))))))))))))	; mismatch after partial match
+                    (outer (+ 1 pos))))))))))))    ; mismatch after partial match
 
 ; same, but for a symbol via conversion to string
 (define (symbol-contains k pstring)

@@ -84,7 +84,7 @@ Swap the 0th and 1st entry in the stack.
     3
     5
 
-### `dup` `<n> dupN`
+### `dup`, `<n> dupN`
 
 `dup` pushes a copy of the 0th element onto the stack. `dupN` pops the 0th argument off the stack, and pushes copies of the top *n* elements onto the stack.
 

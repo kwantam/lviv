@@ -28,11 +28,18 @@
 
 ; lviv-tag is used to tag internal objects
 (define lviv-tag '|(<#lviv#>)|)
-(define (mklvivtag x) (list lviv-tag x))
+(define (mklvivtag x) (cons lviv-tag x))
 (define (lviv-tagged? x)
   (and (pair? x)
        (pair? (car x))
        (eq? lviv-tag (caar x))))
+
+; illegal symbol is used to check static and quote symbols
+; for legality. In particular, we care that the second character
+; of the symbol isn't something illegal
+(define illegal-chars (list #\. #\+ #\- #\& #\* #\!))
+(define (illegal-symbol? symb)
+  (member (string-ref (symbol->string symb) 1) illegal-chars))
 
 ; meta-test for symbolicity
 ; give it the symbol sigil and it
@@ -59,14 +66,16 @@
 (define (x-symbol-elm? sym len)
   (lambda (elm)
     (and (list? elm)
-		 (= len (length elm))
+         (= len (length elm))
          (equal? (mklvivtag sym) (car elm)))))
 
 ; static symbol functions
 (define static-symbol? (x-symbol? #\&))
 (define static-symbol->symbol (x-symbol->symbol static-symbol? "invalid static symbol"))
 (define (mkStaticSymbolElm symb env)
-  (list (mklvivtag '&) symb (object->serial-number env)))
+  (if (illegal-symbol? symb) ; make sure it's legal
+    (eLeft "illegal symbol") ; oops
+    (list (mklvivtag '&) (static-symbol->symbol symb) (object->serial-number env))))
 (define static-symbol-elm? (x-symbol-elm? '& 3))
 (define (static-symbol-env symb) (serial-number->object (caddr symb)))
 (define (static-symbol-sn symb) (caddr symb))
@@ -75,13 +84,23 @@
 ; position symbol functions
 (define posn-symbol? (x-symbol? #\!))
 (define posn-symbol->symbol (x-symbol->symbol posn-symbol? "invalid position symbol"))
-(define (mkPosnRefElm n)
-  (list (mklvivtag '!) n))
+(define (mkPosnRefElm symb)
+  (let ((nNum (string->number 
+                (list->string (cdr (string->list (symbol->string symb)))))))
+    (if (not (and nNum
+                  (= nNum (number->int nNum))
+                  (>= nNum 0)))
+      (eLeft "positional ref must be a non-negative integer")
+      (list (mklvivtag '!) (posn-symbol->symbol symb)))))
 (define posn-symbol-elm? (x-symbol-elm? '! 2))
 (define posn-symbol-sym cadr)
 
 ; quote symbol functions
 (define quote-symbol? (x-symbol? #\*))
+(define (mkQuoteSymbolElm symb)
+  (if (illegal-symbol? symb) ; make sure it's legal
+    (eLeft "illegal symbol") ; oops
+    (quote-symbol->symbol symb)))
 (define quote-symbol->symbol (x-symbol->symbol quote-symbol? "invalid quote symbol"))
 (define quote-symbol-elm? symbol?)
 
