@@ -225,7 +225,7 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
 
 `undef` is used to delete a binding from the environment. If the identifier is a static variable, the binding is searched starting in the attached environment and removed if found. Otherwise, the search begins in the current environment.
 
-Note that undef will search from the present environment level all the way up to the top. To prevent the search from extending into the parent of the starting search environment, use `undefLocal` instead.
+Note that `undef` will search from the present environment level all the way up to the top. To prevent the search from extending into the parent of the starting search environment, use `undefLocal` instead.
 
 #### Scope
 
@@ -235,7 +235,7 @@ Unbound identifiers (invoked with `*`) have no binding when they are put on the 
 
 ### `eval` and `apply`
 
-`eval` evaluates the top entry on the stack. Variables are dereferenced, but most other expressions are idempotent.
+`eval` evaluates the top entry on the stack. Variables are dereferenced, but most other expressions are idempotent. This is probably nonintutive, so a bit of explanation is in order.
 
 In LISP, evaluating a list results in a computation as if that list were typed in as code. In lviv, lists do not represent a fundamental unit of computation, so evaluating a list merely dereferences the enclosed variables. Similarly, application in LISP combines a list of arguments with a function. In lviv, all application involves an element interacting with the stack. If the element is a function, its application involves popping arguments and pushing results. Otherwise, the application of an element to the stack simply results in that element being pushed onto the stack.
 
@@ -243,38 +243,38 @@ To cause its contents to be computed as if entered at the prompt, a list must be
 
     > 1 eval
     1
-	> *a define
-	> *a
-	a
-	> eval
-	> (*a 2) :cons
-	(1 a 2)
-	> 4 *a define
-	(1 a 2)
-	> eval
-	(1 4 2)
+    > *a define
+    > *a
+    a
+    > eval
+    > (*a 2) :cons
+    (1 a 2)
+    > 4 *a define
+    (1 a 2)
+    > eval
+    (1 4 2)
 
 Other than when working on thunks, `apply` takes the top element off the list and applies it as it just typed into the REPL. Thus, the semantics of `apply` are not exactly the same as in LISP: in lviv, `apply` applies the top element on the stack to the stack. Most elements are idempotent through such application (i.e., applying 1 to the stack just puts 1 on the stack); lambdas and primitives result in computation when applied to the stack.
 
-	...continued from above...
-	(1 4 2)
-	> 1 apply
-	(1 4 2)
-	1
-	> *cons
-	(1 4 2)
-	1
-	cons
-	> apply
-	(1 4 2)
-	1
-	cons
-	> eval
-	(1 4 2)
-	1
-	#<primitive cons>
-	> apply
-	(1 1 4 2)
+    ...continued from above...
+    (1 4 2)
+    > 1 apply
+    (1 4 2)
+    1
+    > *cons
+    (1 4 2)
+    1
+    cons
+    > apply
+    (1 4 2)
+    1
+    cons
+    > eval
+    (1 4 2)
+    1
+    #<primitive cons>
+    > apply
+    (1 1 4 2)
 
 thunks are a special case for `apply`; see below.
 
@@ -282,15 +282,15 @@ thunks are a special case for `apply`; see below.
 
 lviv represents explicitly delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
 
-	> (1 *z +) thunk
-	#<thunk ( 1 z + )>
-	> eval
-	#<thunk ( 1 z + )>
-	> dup 2 *z define apply
-	#<thunk ( 1 z + )>
-	3
-	> 15 + *z define apply
-	19
+    > (1 *z +) thunk
+    #<thunk ( 1 z + )>
+    > eval
+    #<thunk ( 1 z + )>
+    > dup 2 *z define apply
+    #<thunk ( 1 z + )>
+    3
+    > 15 + *z define apply
+    19
 
 ### Positional identifiers *TODO*
 
@@ -336,9 +336,9 @@ Binding lists map variables inside the thunk to positions on the stack at applic
     > *x
     x
     > (1 +) :cons
-	( x 1 #<primitive +> )
+    ( x 1 #<primitive +> )
     > (*y *) :append
-	( x 1 #<primitive +> y #<primitive *> )
+    ( x 1 #<primitive +> y #<primitive *> )
     > (*y *x) lambda *xyfunc define
     > 2 1
     2
@@ -346,11 +346,11 @@ Binding lists map variables inside the thunk to positions on the stack at applic
     > xyfunc
     3
     > 2 *xyfunc eval
-	3
-	2
-	#<lambda ( x 1 #<primitive +> y #<primitive *> ) ( y x )>
-	> apply
-	8
+    3
+    2
+    #<lambda ( x 1 #<primitive +> y #<primitive *> ) ( y x )>
+    > apply
+    8
 
 The above lambda is equivalent to
 
@@ -387,8 +387,8 @@ The above lambda is equivalent to
     4
     > (3 :-) (3 +) #t swapUnless drop thunk apply
     1
-	> ((2) (1) #t if) (0) #t if
-	2
+    > ((2) (1) #t if) (0) #t if
+    2
 
 The first example above illustrates that only one of the consequent or alternative is applied as one would expect.
 
