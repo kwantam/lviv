@@ -44,6 +44,18 @@
 ; zip = zipWith cons
 (define (zip l1 l2) (zipWith cons l1 l2))
 
+; anyWith
+; if the supplied test is true for any member
+; of the list return #t, else return #f
+(define (anyWith tst lst)
+  (foldl (lambda (x y) (or x (tst y))) #f lst))
+
+; allWith
+; if the supplied test is false for any member
+; of the list return #f, else return #t
+(define (allWith tst lst)
+  (foldl (lambda (x y) (and x (tst y))) #t lst))
+
 ; string-contains    s1 s2 [start1 end1 start2 end2] -> integer or false
 ; string-contains-ci s1 s2 [start1 end1 start2 end2] -> integer or false
 ;     Does string s1 contain string s2?

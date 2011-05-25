@@ -69,6 +69,7 @@
   (list (mklvivtag '&) symb (object->serial-number env)))
 (define static-symbol-elm? (x-symbol-elm? '& 3))
 (define (static-symbol-env symb) (serial-number->object (caddr symb)))
+(define (static-symbol-sn symb) (caddr symb))
 (define static-symbol-sym cadr)
 
 ; position symbol functions
@@ -77,6 +78,7 @@
 (define (mkPosnRefElm n)
   (list (mklvivtag '!) n))
 (define posn-symbol-elm? (x-symbol-elm? '! 2))
+(define posn-symbol-sym cadr)
 
 ; quote symbol functions
 (define quote-symbol? (x-symbol? #\*))
@@ -92,10 +94,11 @@
                                (quote-symbol-elm? item)))
 
 ; stackops in AST
-(define (mkStackOpElm op) (cons (mklvivtag 'stackop) op))
+(define (mkStackOpElm op name) (list (mklvivtag 'stackop) op name))
 (define (stackOpElm? op)
-  (and (pair? op) (equal? (mklvivtag 'stackop) (car op)) (procedure? (cdr op))))
-(define stackOpElm->stackop cdr)
+  (and (list? op) (= (length op) 3) (equal? (mklvivtag 'stackop) (car op))))
+(define stackOpElm->stackop cadr)
+(define stackOpElm-sym caddr)
 
 ; thunks in AST
 (define (mkThunkElm op)

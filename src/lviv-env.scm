@@ -1,4 +1,4 @@
-;
+;mb
 ;Copyright (c) 2011 Riad S. Wahby <rsw@jfet.org>
 ;
 ;Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -177,7 +177,13 @@
            (delay (mkLambda (force fnCode)
                             (force fnArgs)
                             (stGetEnv state)))))
-    (cond ((eLeft? fnLArgs) fnLArgs)
+    (cond ((eLeft? fnLArgs) fnLArgs) ; popN failed
+          ((not (list? (force fnArgs)))
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "invalid arglist supplied"))
+          ((not (allWith quote-symbol-elm? (force fnArgs)))
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "arglist must be quoted symbols"))
           (else
             (eRight (stStackPush state (force fnLambda)))))))
 
@@ -195,3 +201,4 @@
     (cond ((eLeft? fnLArgs) fnLArgs)
           (else (eRight (stStackPush state 
                                      (force fnBinding)))))))
+
