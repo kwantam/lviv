@@ -29,32 +29,47 @@
 ; probably move to lviv-symbols.scm
 
 (define (stLambdaCall state binding)
+  (if (null? (lambda-code binding)) (eRight '())
   (let* ((rfunc (if (lambda-reverse? binding) values reverse))
          (fnArgNames (lambda-args binding))
          (fnNArgs (length fnArgNames))
          (fnArgs (delay (stStackNPop state fnNArgs)))
-         (lambdaState
+         (lambdaCodeParts                                   ; tail call optimization
+           (splitAt (- (length (lambda-code binding)) 1)    ; take the last call in the lambda
+                    (lambda-code binding)))                 ; apply it in tail position
+         (lambdaState                                       ; state during the lambda
            (delay (cons (stGetStack state)
                         (cons (zip fnArgNames (rfunc (fromLeftRight (force fnArgs))))
                               (lambda-env binding)))))
-         (fnCompResult
+         (fnCompResult                                      ; apply all but last piece of code
            (lambda ()
              (eRight ((applyMap (force lambdaState))
-                      (lambda-code binding)))))
-         (fnResult (delay (with-exception-catcher
+                      (car lambdaCodeParts)))))
+         (fnResult (delay (with-exception-catcher           ; catch errors in above
                             (exceptionHandler #f)
-                            fnCompResult))))
+                            fnCompResult)))
+         (fnFinalEval                                       ; eval last piece in lambda env
+           (delay (lviv-eval (force lambdaState) (cadr lambdaCodeParts)))))
     (cond ((eLeft? (force fnArgs)) (force fnArgs))
           ((eLeft? (force fnResult))
            (rewind state
                    (reverse (fromLeftRight (force fnArgs)))
                    (fromLeftRight (force fnResult))))
-          (else (begin (stUpdateStack
-                         state
-                         (stGetStack (force lambdaState)))
-                       (force fnResult))))))
+          ((eLeft? (force fnFinalEval))                     ; make sure final eval works
+           (rewind state                                    ; otherwise rewind and throw err
+                   (reverse (fromLeftRight (force fnArgs)))
+                   (fromLeftRight (force fnFinalEval))))
+          ; this is like an "else", since stUpdateStack always returns a true value
+          ; so we first update the stack, then we call the already evaluated call
+          ; from the lambda in the original state, which gets the last call into
+          ; tail position
+          ((stUpdateStack state (stGetStack (force lambdaState)))
+           (lviv-apply state (force fnFinalEval))))))) ; tail call
 
 ; primitive call
+; no tail call optimization necessary here; Scheme will do it
+; for calls that require it, and to us it's just one monolithic
+; call
 (define (stPrimCall state binding)
   (let* ((rfunc (if (primitive-reverse? binding) values reverse))
          (fnNArgs (delay (primitive-arity binding)))
@@ -79,5 +94,4 @@
             ; back on the stack
           (else (stStackPush state (fromLeftRight (force fnResult)))))))
             ; else push the new value onto the stack
-
 

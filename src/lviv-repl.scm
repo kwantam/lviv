@@ -51,8 +51,15 @@
          (fnArg (fromLeftRight fnEArg)))
     (cond ((eLeft? fnEArg) fnEArg)              ; pop unsuccessful?
           ((thunkElm? fnArg)                    ; thunk?
-           ((applyMap state)                    ; apply as if just typed in
-            (thunkElm->elm fnArg)))
+           (if (null? (thunkElm->elm fnArg)) (eRight '()) ; do nothing with null thunk
+           (let* ((thunkCode (thunkElm->elm fnArg))       ; else perform tail call opt
+                  (thunkCodeParts (splitAt (- (length thunkCode) 1)
+                                           thunkCode)))
+             (begin ((applyMap state) (car thunkCodeParts)) ; call first part of thunk
+                    (lviv-apply                             ; then tail call last part
+                      state
+                      (lviv-eval state
+                                 (cadr thunkCodeParts)))))))
           (else (lviv-apply state fnArg)))))    ; otherwise, just apply it like anything else
 
 ; the main eval procedure

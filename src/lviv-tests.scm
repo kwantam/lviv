@@ -208,4 +208,3 @@
 ((applyMap lvivState) '(*a undef))
 (test (eLeft? (stEnvLookupBinding lvivState 'a)) "a still bound after undef?")
 
-

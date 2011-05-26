@@ -292,15 +292,19 @@
              (if (list? (force fnxCode))
                (force fnxCode)
                (list (force fnxCode)))))
+         (fnCodeParts (delay (splitAt (- (length (force fnCode)) 1) ; split code for
+                                      (force fnCode))))     ; tail call optimization
          (fnState (begin (delay (cons (stGetStack state)    ; make a new state for the let
                                       (envNewChild (stGetEnv state))))))
-         (fnCompResult                                      ; run the code
+         (fnCompResult                                      ; run the first part of the code
            (lambda ()
              (eRight ((applyMap (force fnState))
-                      (force fnCode)))))
-         (fnResult (delay (with-exception-catcher           ; wrap code with exception handler
+                      (car (force fnCodeParts))))))
+         (fnResult (delay (with-exception-catcher           ; wrap above with exception handler
                             (exceptionHandler #f)
-                            fnCompResult))))
+                            fnCompResult)))
+         (fnLastEval                                        ; last eval happens inside let environ
+           (delay (lviv-eval (force fnState) (cadr (force fnCodeParts))))))
     (cond ((eLeft? fnLArgs) fnLArgs)                        ; popN failed
           ((not (list? (force fnBinds)))                    ; invalid bindings - not a list
            (rewind state (reverse (fromLeftRight fnLArgs))
@@ -334,10 +338,15 @@
            (rewind state
                    (reverse (fromLeftRight fnLArgs))
                    (fromLeftRight (force fnResult))))
-          (else (begin (stUpdateStack                       ; else update stack with computation
-                         state                              ; and return the result of the let
-                         (stGetStack (force fnState)))
-                       (force fnResult))))))
+          ((eLeft? (force fnLastEval))                      ; check that last eval was successful
+           (rewind state                                    ; otherwise rewind and throw error
+                   (reverse (fromLeftRight fnLArgs))
+                   (fromLeftRight (force fnLastEval))))
+          ; this is an "else" since stUpdateStack always returns a true value
+          ; update the stack with whatever new values from the let, then run
+          ; the final computation
+          ((stUpdateStack state (stGetStack (force fnState)))
+           (lviv-apply state (force fnLastEval))))))
 
 ; bind a stackop function to a symbol,
 ; make a test that returns the function when
