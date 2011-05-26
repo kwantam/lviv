@@ -90,6 +90,19 @@
                     (inner (+ 1 i-pat) (+ 1 i-str))
                     (outer (+ 1 pos))))))))))))    ; mismatch after partial match
 
+; Return the index of the first occurence of a-char in str, or #f
+; This is a subset of the corresponding SRFI-13 function.
+; The latter is more generic.
+; this function is from http://okmij.org/ftp/Scheme/lib/srfi-13-local.scm
+; as noted on http://okmij.org/ftp/, this code is in the public domain
+(define (string-index str a-char)
+  (let loop ((pos 0))
+    (cond
+      ((>= pos (string-length str)) #f) ; whole string has been searched, in vain
+      ((char=? a-char (string-ref str pos)) pos)
+      (else (loop (+ 1 pos))))))
+
+
 ; same, but for a symbol via conversion to string
 (define (symbol-contains k pstring)
   (string-contains (symbol->string k) pstring))

@@ -142,12 +142,12 @@
 (stStackSwapUnless lvivState)
 (testStack '(1 5 5) "non-bool swapUnless test failed")
 
-(stEnvUpdateBinding lvivState '(a . 1))
-(stEnvUpdateBinding lvivState '(b . 2))
-(stEnvUpdateBinding lvivState '(c . 3))
-(stEnvUpdateBinding lvivState '(d . 4))
-(stEnvUpdateBinding lvivState '(e . 5))
-(stEnvUpdateBinding lvivState '(a . 6))
+(stEnvUpdateBinding lvivState (cons 'a 1))
+(stEnvUpdateBinding lvivState (cons 'b 2))
+(stEnvUpdateBinding lvivState (cons 'c 3))
+(stEnvUpdateBinding lvivState (cons 'd 4))
+(stEnvUpdateBinding lvivState (cons 'e 5))
+(stEnvUpdateBinding lvivState (cons 'a 6))
 ((stEnvDelBinding #f) lvivState 'd)
 
 (test (eLeft? (stEnvLookupBinding lvivState 'd)) "d still bound!?")

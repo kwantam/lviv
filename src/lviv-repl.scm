@@ -137,7 +137,7 @@
                                  (newln)))
                          ((posn-symbol-elm? elm)
                           (begin (display "!")
-                                 (display (posn-symbol-elm elm))
+                                 (display (posn-symbol->symbol elm))
                                  (newln)))
                          ((stackOpElm? elm)
                           (begin (display "#<stackOp ")
