@@ -1,6 +1,6 @@
 # lviv
 
-lviv is a functional RPN programming language.
+lviv is a functional RPN programming language. Or maybe it's just a fancy programmable calculator.
 
 The name comes from the city of Lviv, where Jan Lukasiewicz was born. Lukasiewicz invented prefix or "Polish" notation to simplify the syntax of sentential logic; later, Burks, Warren, and Wright (and even later Bauer and Dijkstra) proposed postfix, or "reverse Polish" notation as a good fit for stack based machines.
 
@@ -146,23 +146,23 @@ Pushes the depth of the stack prior to the `depth` operation onto the stack.
 
 ### `nop`
 
-`nop` does nothing. It is useful for operations that conditionally modify the stack.
+Does nothing. It is useful for operations that conditionally modify the stack.
 
 ### `env`
 
-`env` shows the current environment. It can be useful for debugging.
+Shows the current environment. It can be useful for debugging.
 
 ### Mathematical operations
 
-Many mathematical operations, including arithmetic, trigonometric, and complex functions, are available.
+All mathematical functions available in Scheme can be bound as primitives in lviv. These should be bound in the prelude when I get around to it :)
 
 ## Functional syntax
 
-lviv supports a full range of standard functional syntax.
+lviv syntax will be somewhat familiar to LISP programmers.
 
 ### Lists
 
-Lists in lviv should be familiar to LISP users. Formally, a list is defined either as the empty list (`nil` or `()`), or as the result of the `cons` operation on an element and a list. An element is anything that can be a stack entry.
+Formally, a list is defined either as the empty list (`nil` or `()`), or as the result of the `cons` operation on an element and a list. An element is anything that can be a stack entry.
 
 `car` and `cdr` produce the element and the trailing list, respectively. `uncons` pops a list off the stack and pushes on the cdr, then the car.
 
@@ -202,11 +202,11 @@ Tuples in lviv can also be constructed using `cons`. A tuple is simply an unterm
 
 #### `<val> <identifier> define`
 
-`define` binds the identifier in the 0th position on the stack with the value in the 1st in the containing environment. If the identifier is a static variable, the binding is placed in the attached environment. Otherwise, the binding is placed in the current environment.
+`define` binds the identifier in the 0th position on the stack with the value in the 1st. If the identifier is a static symbol (&foo), the binding is placed in the attached environment. Otherwise, the binding is placed in the current environment.
 
 Identifiers can contain alphanumerics or any of `! $ % & * + - . / : < = > ? @ ^ _ ~`, but must begin with a character that cannot begin a number and is not otherwise reserved (i.e., any valid character other than `. + - & * !`).
 
-When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `*` sigil can be used. The `&` sigil indicates that the variable is statically bound in enclosing environment, whereas the `*` prefix simply places the identifier on the stack, leaving its binding to an environment until evaluation.
+When a bound variable is placed on the stack, it is immediately replaced by its value. To invoke the identifier and force delayed binding, the `&` or `*` sigil can be used. The `&` sigil indicates that the variable is statically bound when pushed on the stack, whereas the `*` prefix simply places the identifier on the stack, leaving its binding to an environment until evaluation.
 
     > 1 *z define
     > 2 z
@@ -220,6 +220,8 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     #<thunk ( 1 &z + )>
     > apply
     3
+    > (*z &z +) (*z) lambda apply
+    5
 
 #### `<identifier> undef`, `<identifier> undefLocal`
 
@@ -229,9 +231,9 @@ Note that `undef` will search from the present environment level all the way up 
 
 #### Scope
 
-Static variables (invoked with `&`) bind immediately to the enclosing environment when the variable is put on the stack. The static binding element carries a reference to its environment with it, soit can be properly dereferenced even when enclosed in another environment (e.g., a let or lambda) where its name is shadowed.
+Static sybols (invoked with `&`) bind immediately to the enclosing environment when the symbol is put on the stack. The static binding element carries a reference to its environment with it, so it can be properly dereferenced even when enclosed in another environment (e.g., a let or lambda) where its name is shadowed.
 
-Unbound identifiers (invoked with `*`) have no binding when they are put on the stack. Instead, they are bound when they are evaluated. Since lambdas and lets carry an environment with them, unbound identifiers are still statically scoped inside these elements. However, an unbound identifier inside a thunk takes its value from the enclosing environment at the time of application (as is the case with the `delay`-`force` relationship in Scheme).
+Unbound identifiers (invoked with `*`) have no binding when they are put on the stack. Instead, they are bound when they are evaluated. Since lambdas and lets carry an environment with them, unbound identifiers are statically scoped once bound inside these elements. However, an unbound identifier inside a thunk takes its value from the enclosing environment at the time of application. This effectively allows unbound identifiers to be used as static variables (inside lambdas and lets) or dynamic variables (inside thunks).
 
 ### `eval` and `apply`
 
@@ -254,7 +256,7 @@ To cause its contents to be computed as if entered at the prompt, a list must be
     > eval
     (1 4 2)
 
-Other than when working on thunks, `apply` takes the top element off the list and applies it as it just typed into the REPL. Thus, the semantics of `apply` are not exactly the same as in LISP: in lviv, `apply` applies the top element on the stack to the stack. Most elements are idempotent through such application (i.e., applying 1 to the stack just puts 1 on the stack); lambdas and primitives result in computation when applied to the stack.
+Other than when working on thunks, `apply` takes the top element off the list and applies it as it just typed into the REPL. Thus, the semantics of `apply` are not exactly the same as in LISP: in lviv, `apply` applies the top element on the stack to the stack. Most elements are idempotent through such application (i.e., applying 1 to the stack just puts 1 on the stack); lambdas, primitives, and thunks result in computation when applied to the stack.
 
     ...continued from above...
     (1 4 2)
@@ -276,11 +278,9 @@ Other than when working on thunks, `apply` takes the top element off the list an
     > apply
     (1 1 4 2)
 
-thunks are a special case for `apply`; see below.
-
 ### Thunks
 
-lviv represents explicitly delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
+lviv represents delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
 
     > (1 *z +) thunk
     #<thunk ( 1 z + )>
@@ -291,6 +291,8 @@ lviv represents explicitly delayed computations using thunks. The `apply` functi
     3
     > 15 + *z define apply
     19
+
+Note that unlike `delay`-`force` in Scheme, lviv does not memoize thunks (at least, not yet).
 
 ### Positional identifiers *TODO*
 
@@ -327,7 +329,7 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
     > 2 *expt primitive *expt define 2 :expt
     81
 
-### Lambdas
+### `<code> <binding-list> lambda`
 
 `lambda` combines a delayed computation and a binding list into a function. Positional identifiers cannot be used with a `lambda`.
 
@@ -363,7 +365,7 @@ The above lambda is equivalent to
     > apply
     3
 
-### `let` *TODO*
+### `<code> <assoc-list> let`
 
 `let` is similar to `lambda`: it combines a delayed computation and a binding list. `let` is evaluated immediately and the result of the evaluation is pushed onto the stack.
 
@@ -394,20 +396,19 @@ The first example above illustrates that only one of the consequent or alternati
 
 `unless` is equivalent to `swapIf drop thunk apply`.
 
-### `cond` *TODO*
+### `cond` *YAGNI?*
 
 ## Other operations
 
 ### exception handling *TODO*
 
-
-### `tstk`, `untstk`, and `rtstk` *TODO*
+### `tstk`, `untstk`, and `rtstk` *YAGNI?*
 
 `tstk` moves aside the present stack and replaces it with an empty temporary stack. `untstk` removes the temporary stack and restores the previous one. `rtstk` pops the 0th value off the temporary stack, restores the previous stack, and pushes this value.
 
 `tstk` calls can be nested; each `untstk` or `rtstk` ascends one level of nesting.
 
-### namespacing *TODO*
+### namespacing *YAGNI?*
 
     > :: namespace
     --> namespace : ::
@@ -426,7 +427,7 @@ The first example above illustrates that only one of the consequent or alternati
     > ::foo::bar::y
     2
 
-### named stacks *TODO*
+### named stacks *YAGNI?*
 
     > __ stack
     --> stack : __
