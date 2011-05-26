@@ -54,12 +54,9 @@
 ; meta-converter
 ; give it the sigil and an error msg
 ; it returns the conversion function
-(define (x-symbol->symbol test err)
-  (lambda (symb)
-    (if (not (test symb))
-      (raise err)
-      (let ((symb-str (symbol->string symb)))
-        (string->symbol (substring symb-str 1 (string-length symb-str)))))))
+(define (x-symbol->symbol symb)
+  (let ((symb-str (symbol->string symb)))
+    (string->symbol (substring symb-str 1 (string-length symb-str)))))
 
 ; meta-test for symbol-elementicity (that is, symbol in AST)
 ; give it symbol and length of representation
@@ -71,7 +68,7 @@
 
 ; static symbol functions
 (define static-symbol? (x-symbol? #\&))
-(define static-symbol->symbol (x-symbol->symbol static-symbol? "invalid static symbol"))
+(define static-symbol->symbol x-symbol->symbol)
 (define (mkStaticSymbolElm symb env)
   (if (illegal-symbol? symb) ; make sure it's legal
     (eLeft "illegal symbol") ; oops
@@ -83,7 +80,7 @@
 
 ; position symbol functions
 (define posn-symbol? (x-symbol? #\!))
-(define posn-symbol->symbol (x-symbol->symbol posn-symbol? "invalid position symbol"))
+(define posn-symbol->symbol x-symbol->symbol)
 (define (mkPosnRefElm symb)
   (let ((nNum (string->number 
                 (list->string (cdr (string->list (symbol->string symb)))))))
@@ -101,12 +98,12 @@
   (if (illegal-symbol? symb) ; make sure it's legal
     (eLeft "illegal symbol") ; oops
     (quote-symbol->symbol symb)))
-(define quote-symbol->symbol (x-symbol->symbol quote-symbol? "invalid quote symbol"))
+(define quote-symbol->symbol x-symbol->symbol)
 (define quote-symbol-elm? symbol?)
 
 ; is this symbol reversed?
 (define reverse-symbol? (x-symbol? #\:))
-(define reverse-symbol->symbol (x-symbol->symbol reverse-symbol? "invalid reverse symbol"))
+(define reverse-symbol->symbol x-symbol->symbol)
 
 ; is this an element that can be used to define an environment variable?
 (define (symbol-elm? item) (or (static-symbol-elm? item)
