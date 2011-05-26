@@ -241,6 +241,107 @@
          (newline)
          (eRight '())))
 
+; turn some code and a binding list into a lambda
+; put it on the stack
+(define (stLambda state)
+  (let* ((fnLArgs (stStackNPop state 2))
+         (fnArgs (delay (cadr (fromLeftRight fnLArgs))))
+         (fnxCode (delay (car (fromLeftRight fnLArgs))))
+         (fnCode 
+           (delay
+             (if (list? (force fnxCode))
+               (force fnxCode)
+               (list (force fnxCode)))))
+         (fnLambda
+           (delay (mkLambda (force fnCode)
+                            (force fnArgs)
+                            (stGetEnv state)))))
+    (cond ((eLeft? fnLArgs) fnLArgs) ; popN failed
+          ((not (list? (force fnArgs)))
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "invalid arglist supplied"))
+          ((not (allWith quote-symbol-elm? (force fnArgs)))
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "arglist must be quoted symbols"))
+          (else
+            (eRight (stStackPush state (force fnLambda)))))))
+
+; as above, but creates a primitive binding.
+(define (stPrimitive state)
+  (let* ((fnLArgs (stStackNPop state 2))
+         (fnId (delay (cadr (fromLeftRight fnLArgs))))
+         (fnArity (delay (car (fromLeftRight fnLArgs))))
+         (fnBinding (delay (mkPrimBinding (force fnId)
+                                          (force fnArity)))))
+    (cond ((eLeft? fnLArgs) fnLArgs)
+          (else (eRight (stStackPush state 
+                                     (force fnBinding)))))))
+
+; `let` makes a temporary environment and executes a thunk in it
+; <code> <bindings> let
+; <bindings> is a list of name-value pairs
+; values are executed in sequence as thunks, and after
+; execution the top value on the stack is popped and
+; bound to the given name in the temporary environment
+(define (stLet state)
+  (let* ((fnLArgs (stStackNPop state 2))                    ; args for the let
+         (fnBinds (delay (cadr (fromLeftRight fnLArgs))))   ; let-bindings
+         (fnxCode (delay (car (fromLeftRight fnLArgs))))    ; let-code
+         (fnCode                                            ; make sure let-code is a list
+           (delay
+             (if (list? (force fnxCode))
+               (force fnxCode)
+               (list (force fnxCode)))))
+         (fnState (begin (delay (cons (stGetStack state)    ; make a new state for the let
+                                      (envNewChild (stGetEnv state))))))
+         (fnCompResult                                      ; run the code
+           (lambda ()
+             (eRight ((applyMap (force fnState))
+                      (force fnCode)))))
+         (fnResult (delay (with-exception-catcher           ; wrap code with exception handler
+                            (exceptionHandler #f)
+                            fnCompResult))))
+    (cond ((eLeft? fnLArgs) fnLArgs)                        ; popN failed
+          ((not (list? (force fnBinds)))                    ; invalid bindings - not a list
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "invalid bindings supplied"))
+          ((not (allWith                                    ; invalid bindings - not assoc list
+                  (lambda (x)
+                    (and (pair? x)
+                         (quote-symbol-elm? (car x))))
+                  (force fnBinds)))
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "binding list must be pairs of (sym . binding)"))
+          ((not (allWith                                    ; run the bindings
+                  (lambda (x)
+                    (let ((bindVal (delay (stStackPop (force fnState))))
+                          (bindCode 
+                            (allWith eRight?
+                                     ((applyMap (force fnState))
+                                      (if (list? (cdr x))
+                                        (cdr x)
+                                        (list (cdr x)))))))
+                      (and bindCode
+                           (eRight? (force bindVal))
+                           (stEnvAddBinding
+                             (force fnState)
+                             (cons (car x)
+                                   (fromLeftRight (force bindVal)))))))
+                  (force fnBinds)))
+           (rewind state (reverse (fromLeftRight fnLArgs))
+                   "bindings failed"))
+          ((eLeft? (force fnResult))                        ; run computation, rewind if exception
+           (rewind state
+                   (reverse (fromLeftRight fnLArgs))
+                   (fromLeftRight (force fnResult))))
+          (else (begin (stUpdateStack                       ; else update stack with computation
+                         state                              ; and return the result of the let
+                         (stGetStack (force fnState)))
+                       (force fnResult))))))
+
+; bind a stackop function to a symbol,
+; make a test that returns the function when
+; given the symbol
 (define (stackOp? symb f)
   (lambda (op) (if (eq? symb op) f #f)))
 
@@ -274,6 +375,7 @@
       ((stackOp? 'unless stUnless) op)
       ((stackOp? 'env stEnv) op)
       ((stackOp? 'nop stNop) op)
+      ((stackOp? 'let stLet) op)
       ))
 
 

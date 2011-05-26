@@ -85,6 +85,7 @@
 ; does not check whether item is already there
 (define (envAddBinding env item)
   (envSetBindings env (cons item (envBindings env))))
+(define stEnvAddBinding (stEnvBindOp envAddBinding))
 
 (define (envAddMany env items)
   (foldl envAddBinding env items))
@@ -157,48 +158,4 @@
             (else
               ((stEnvDelBinding local?) state fnId))))))
 
-; as above, but creates a lambda and
-; puts it into the environment.
-; a static symbol's environment is respected
-; shouldn't lambda just put the result back on
-; the stack and rely on define to put it into
-; the environment? otherwise, we're replicating
-; code unnecessarily
-(define (stLambda state)
-  (let* ((fnLArgs (stStackNPop state 2))
-         (fnArgs (delay (cadr (fromLeftRight fnLArgs))))
-         (fnxCode (delay (car (fromLeftRight fnLArgs))))
-         (fnCode 
-           (delay
-             (if (list? (force fnxCode))
-               (force fnxCode)
-               (list (force fnxCode)))))
-         (fnLambda
-           (delay (mkLambda (force fnCode)
-                            (force fnArgs)
-                            (stGetEnv state)))))
-    (cond ((eLeft? fnLArgs) fnLArgs) ; popN failed
-          ((not (list? (force fnArgs)))
-           (rewind state (reverse (fromLeftRight fnLArgs))
-                   "invalid arglist supplied"))
-          ((not (allWith quote-symbol-elm? (force fnArgs)))
-           (rewind state (reverse (fromLeftRight fnLArgs))
-                   "arglist must be quoted symbols"))
-          (else
-            (eRight (stStackPush state (force fnLambda)))))))
-
-; as above, but creates a primitive binding.
-; Seems like this should also create a primitive binding
-; that then gets put into the environment using the
-; `define` construct rather than modifying the env
-; directly
-(define (stPrimitive state)
-  (let* ((fnLArgs (stStackNPop state 2))
-         (fnId (delay (cadr (fromLeftRight fnLArgs))))
-         (fnArity (delay (car (fromLeftRight fnLArgs))))
-         (fnBinding (delay (mkPrimBinding (force fnId)
-                                          (force fnArity)))))
-    (cond ((eLeft? fnLArgs) fnLArgs)
-          (else (eRight (stStackPush state 
-                                     (force fnBinding)))))))
 
