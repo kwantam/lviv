@@ -1,10 +1,37 @@
 # lviv
 
-lviv is a functional RPN programming language. Or maybe it's just a fancy programmable calculator.
+lviv is a functional stack-based programming language. Or maybe it's just a fancy programmable calculator.
 
 The name comes from the city of Lviv, where Jan Lukasiewicz was born. Lukasiewicz invented prefix or "Polish" notation to simplify the syntax of sentential logic; later, Burks, Warren, and Wright (and even later Bauer and Dijkstra) proposed postfix, or "reverse Polish" notation as a good fit for stack based machines.
 
-## RPN basics
+## Examples
+
+Let's look at some example code so you know what you're getting yourself into.
+
+#### square
+
+    > (*x dup *) (*x) lambda *square define
+    > 5 square
+    25
+
+#### factorial
+
+    > ((1) (*x 1 *x - *fact *) *x 0 eq? if) (*x) lambda *fact define
+    > 5 fact
+    120
+
+#### fibonacci
+
+    > ((swap drop) (dup 3 roll + 1 *x - *fibHlp) *x 0 eq? if) (*x) lambda *fibHlp define
+    > ((0) (0 1 1 *x - *fibHlp) 1 *x < if) (*x) lambda *fib define
+    > 5 fib
+    5
+    > 15 fib
+    610
+    > 25 fib
+    75025
+
+## Basics
 
 If you've used an HP calculator, you're probably familiar with how RPN works. Expressions are entered by pushing entries onto a stack and applying operators to the stack. Operators pop a defined number of operands off the stack, perform a computation, and push the result back onto the stack. For example,
 

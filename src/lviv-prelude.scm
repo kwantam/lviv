@@ -40,6 +40,7 @@
 ((applyMap lvivState) '(2 expt primitive expt define))
 ((applyMap lvivState) '(1 sqrt primitive sqrt define))
 ((applyMap lvivState) '(2 append primitive append define))
+((applyMap lvivState) '(2 *< primitive *< define))
 
 (define (add-cxrs state n)
   (letrec ((nums (take n '(1 2 4 8 16)))
