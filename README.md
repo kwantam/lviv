@@ -39,7 +39,7 @@ We could also do this with the helper defined inside the parent environment:
     > 25 fib
     75025
 
-Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes. In general, the number of stars is *paren-depth*&#150;*if-paren-depth* if you want the variable's value, or *paren-depth*&#150;*if-paren-depth*+1 if you want the literal name.
+Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes. In general, the number of stars is *parenDepth*-*ifParenDepth* if you want the variable's value, or *parenDepth*-*ifParenDepth*+1 if you want the literal name.
 
 #### Accumulator
 
