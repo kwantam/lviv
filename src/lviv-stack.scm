@@ -348,6 +348,28 @@
           (else
             (lviv-apply (force fnState) (force fnLastEval))))))
 
+; temporary stack
+(define (stTStk state)
+  (eRight (stUpdateStackBox state (cons '() (stGetStackBox state)))))
+
+(define (stUnTStk return?)
+  (lambda (state)
+    (cond ((< (length (stGetStackBox state)) 2)
+           (eLeft "already in outermost stack"))
+          (return?
+            (let ((toPush (stStackPop state)))
+              (if (eLeft? toPush)
+                toPush
+                (begin (stUpdateStackBox
+                         state (cdr (stGetStackBox state)))
+                       (eRight (stStackPush
+                                 state
+                                 (fromLeftRight toPush)))))))
+          (else
+            (eRight 
+              (stUpdateStackBox 
+                state (cdr (stGetStackBox state))))))))
+
 ; bind a stackop function to a symbol,
 ; make a test that returns the function when
 ; given the symbol
@@ -385,6 +407,9 @@
       ((stackOp? 'env stEnv) op)
       ((stackOp? 'nop stNop) op)
       ((stackOp? 'let stLet) op)
+      ((stackOp? 'tstk stTStk) op)
+      ((stackOp? 'untstk (stUnTStk #f)) op)
+      ((stackOp? 'rtstk (stUnTStk #t)) op)
       ))
 
 

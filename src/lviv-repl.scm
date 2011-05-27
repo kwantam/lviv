@@ -108,20 +108,31 @@
          ((lambda? item) (stLambdaCall state item))
          (else (stStackPush state item))))) ; else just push it on the stack
 
+(define (read-list)
+  (begin (input-port-timeout-set! (current-input-port) 0)
+         (letrec ((readHlp
+                    (lambda (soFar)
+                      (let ((nextRead (read)))                         
+                        (if (eq? nextRead '#!eof)
+                          (begin (input-port-timeout-set!
+                                   (current-input-port) #f)
+                                 (reverse soFar))
+                          (readHlp (cons nextRead soFar)))))))
+           (readHlp '()))))
+
 ; we use read-line rather than read so that we get all of the inputs at once,
 ; and don't end up printing the state of the stack between each element in
 ; the input as we apply them
 (define (lviv-repl state input) ; repl
-  (if (eq? input '#!eof)
-    #f
-    (begin 
-      (if (string? input)
-        (with-exception-catcher (exceptionHandler #t) (lambda ()
-        ((applyMap state)
-         (call-with-input-string input read-all)))))
-      (lviv-ppstack (stGetStack state) (stEnvLookupBinding state '_stack_display_depth))
-      (display "> ")
-      (lviv-repl state (read-line)))))
+  (cond ((eq? input '#!eof) #f)
+        (else
+          (if input
+            (let ((allInput (cons input (read-list))))
+              (with-exception-catcher (exceptionHandler #t)
+                                      (lambda () ((applyMap state) allInput)))))
+          (lviv-ppstack (stGetStack state) (stEnvLookupBinding state '_stack_display_depth))
+          (display "> ")
+          (lviv-repl state (read)))))
 
 ; default stack display depth
 (define _stack_display_depth 10)

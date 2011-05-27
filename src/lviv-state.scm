@@ -46,4 +46,4 @@
 ; update environment
 (define (stUpdateEnv oldState newEnv) (set-cdr! oldState newEnv))
 (define (stUpdateStack oldState newStack) (set-car! (car oldState) newStack))
-
+(define (stUpdateStackBox oldState newStackBox) (set-car! oldState newStackBox))

@@ -153,9 +153,15 @@
             ((not (symbol-elm? fnId))
              (rewind state (list fnId) "invalid identifier"))
             ((static-symbol-elm? fnId)
-             (envDelBinding (static-symbol-env fnId)
-                            (static-symbol-sym fnId)))
+             (let ((res (envDelBinding (static-symbol-env fnId)
+                                       (static-symbol-sym fnId))))
+               (if (eLeft? res)
+                 (rewind state (list fnId) (fromLeftRight res))
+                 res)))
             (else
-              ((stEnvDelBinding local?) state fnId))))))
+              (let ((res ((stEnvDelBinding local?) state fnId)))
+                (if (eLeft? res)
+                  (rewind state (list fnId) (fromLeftRight res))
+                  res)))))))
 
 

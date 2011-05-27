@@ -33,17 +33,21 @@ Let's look at some example code so you know what you're getting yourself into.
 
 We could also do this with the helper defined inside the parent environment:
 
-    > ( ((swap drop) (dup 3 roll + **x 1 - *fibHlp) **x 0 eq? if) (**x) lambda *fibHlp define (0) (0 1 *x 1 - *fibHlp) *x 1 < if ) (*x) lambda *fib define
+    > ( ((swap drop) (dup 3 roll + **x 1 - **fibHlp) **x 0 eq? if) (**x) lambda
+        **fibHlp define (0) (0 1 *x 1 - **fibHlp) *x 1 < if ) (*x) lambda
+      *fib define
     > 25 fib
     75025
 
-Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes.
+Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes. In general, if you want to delay evaluation until the environment inside *n* levels of parens, add *n* stars. If you want the bare identifier after *n* levels of parens, add *n+1* stars like `**fibHlp` above.
 
 #### Accumulator
 
 We define two functions, showA and incA, that show and increment the value of an accumulator, respectively. Note that both functions close over a private environment.
 
-    > ( (**n) () lambda (1 **n + **nref define) () lambda *&n *nref define 1 *n define ) () lambda apply *incA define *readA define
+    > ( (**n) () lambda (1 **n + **nref define) () lambda 
+        *&n **nref define 1 *n define ) () lambda apply
+      *incA define *readA define
     > readA
     1
     > drop incA incA incA readA
@@ -235,11 +239,11 @@ Formally, a list is defined either as the empty list (`nil` or `()`), or as the 
 
 Tuples in lviv can also be constructed using `cons`. A tuple is simply an unterminated list.
 
-    > b a cons
+    > *a *b cons
     (a . b)
-    > b a cons cons
+    > *a *b cons cons
     ((a . b) a . b)
-    > (c d . (e . f))
+    > (*c *d . (*e . *f))
     ((a . b) a . b)
     (c d e . f)
 
@@ -260,7 +264,7 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     > -
     1
     > (&z +) cons thunk
-    #<thunk ( 1 &z + )>
+    #<thunk ( 1 &z(env#2) #<primitive +> )>
     > 2 *z define
     #<thunk ( 1 &z + )>
     > apply
@@ -305,31 +309,31 @@ To cause its contents to be computed as if entered at the prompt, a list must be
 Other than when working on thunks, `apply` takes the top element off the list and applies it as it just typed into the REPL. Thus, the semantics of `apply` are not exactly the same as in LISP: in lviv, `apply` applies the top element on the stack to the stack. Most elements are idempotent through such application (i.e., applying 1 to the stack just puts 1 on the stack); lambdas, primitives, and thunks result in computation when applied to the stack.
 
     ...continued from above...
-    (1 4 2)
+    ( 1 4 2 )
     > 1 apply
-    (1 4 2)
+    ( 1 4 2 )
     1
     > *:cons
-    (1 4 2)
+    ( 1 4 2 )
     1
     :cons
     > apply
-    (1 4 2)
+    ( 1 4 2 )
     1
     :cons
     > eval
-    (1 4 2)
+    ( 1 4 2 )
     1
     #<primitive cons>
     > apply
-    (1 1 4 2)
+    ( 1 1 4 2 )
 
 ### Thunks
 
 lviv represents delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
 
     > (1 *z +) thunk
-    #<thunk ( 1 z + )>
+    #<thunk ( 1 z #<primitive +> )>
     > eval
     #<thunk ( 1 z + )>
     > dup 2 *z define apply
@@ -338,9 +342,7 @@ lviv represents delayed computations using thunks. The `apply` function unwraps 
     > 15 + *z define apply
     19
 
-Note that unlike `delay`-`force` in Scheme, lviv does not memoize thunks (at least, not yet).
-
-### Positional identifiers *TODO*
+### Positional identifiers *NOT YET IMPLEMENTED*
 
 Positional identifiers are identifiers of the form `![0-9]+` which are unbound until evaluated. In a thunk, these identifiers represent the corresponding stack positions at the time the thunk is evaluated.
 
@@ -351,11 +353,11 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
     1
     > (!0 1 +) thunk
     1
-    #<thunk ( !0 1 + )>
+    #<thunk ( !0 1 #<primitive +> )>
     > 2 swap
     1
     2
-    #<thunk ( !0 1 + )>
+    #<thunk ( !0 1 #<primitive +> )>
     > eval
     1
     3
@@ -371,9 +373,9 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
     3
     #<primitive expt>
     > apply
-    9
-    > 2 *expt primitive *expt define 2 :expt
-    81
+    8
+    > 2 *expt primitive *expt define 2 expt
+    64
 
 ### `<code> <binding-list> lambda`
 
@@ -415,14 +417,14 @@ The above lambda is equivalent to
 
 `let` is similar to `lambda`: it combines a delayed computation and a binding list. `let` is evaluated immediately and the result of the evaluation is pushed onto the stack.
 
-    > 2 a define
-    > ( &a a b + * ) ( ( a . 1 ) ( b . ( a &a + ) ) ) let
+    > 2 *a define
+    > (&a *a *b + *) ( (*a . 1) (*b . (*a &a +)) ) let
     8
     > 6 *z define
     8
     > (*z +) cons
-    ( 8 z + )
-    > (*a *) append ( (a . 1) ) let
+    ( 8 z #<primitive +> )
+    > (*a *) append ( (*a . 1) ) let
     14
 
 ### `<consequent> <alternative> <test> if`, `<consequent> <alternative> <test> unless`
@@ -433,60 +435,22 @@ The above lambda is equivalent to
     1
     > (3 -) (3 +) #f if
     4
-    > (3 :-) (3 +) #t swapUnless drop thunk apply
+    > (3 -) (3 +) #t swapUnless drop thunk apply
     1
-    > ((2) (1) #t if) (0) #t if
-    2
+    > ((2) (1) #t if) (0) #t if +
+    3
 
 The first example above illustrates that only one of the consequent or alternative is applied as one would expect.
 
 `unless` is equivalent to `swapIf drop thunk apply`.
 
-### `cond` *YAGNI?*
-
 ## Other operations
 
-### exception handling *TODO*
-
-### `tstk`, `untstk`, and `rtstk` *YAGNI?*
+### `tstk`, `untstk`, and `rtstk`
 
 `tstk` moves aside the present stack and replaces it with an empty temporary stack. `untstk` removes the temporary stack and restores the previous one. `rtstk` pops the 0th value off the temporary stack, restores the previous stack, and pushes this value.
 
 `tstk` calls can be nested; each `untstk` or `rtstk` ascends one level of nesting.
 
-### namespacing *YAGNI?*
+### exception handling *NOT YET IMPLEMENTED*
 
-    > :: namespace
-    --> namespace : ::
-    > ::foo namespace
-    --> namespace : ::foo
-    > bar namespace
-    --> namespace : ::foo::bar
-    > 1 z private define
-    --> ::foo::bar::z : 1 (private)
-    > 2 y define
-    --> ::foo::bar::y : 2
-    > :: namespace
-    --> namespace : ::
-    > ::foo::bar::z
-    --> error: attempted to access private variable ::foo::bar::z
-    > ::foo::bar::y
-    2
-
-### named stacks *YAGNI?*
-
-    > __ stack
-    --> stack : __
-    > 1 2 3
-    1
-    2
-    3
-    > __foo stack
-    --> stack : __foo
-    > 1
-    1
-    > __ stack
-    --> stack : __
-    1
-    2
-    3
