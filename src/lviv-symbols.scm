@@ -30,9 +30,9 @@
 (define lviv-tag '|(<#lviv#>)|)
 (define (mklvivtag x) (cons lviv-tag x))
 (define (lviv-tagged? x)
-  (and (pair? x)
-       (pair? (car x))
-       (eq? lviv-tag (caar x))))
+  (and (vector? x)
+       (pair? (vector-ref x 0))
+       (eq? lviv-tag (car (vector-ref x 0)))))
 
 ; illegal symbol is used to check static and quote symbols
 ; for legality. In particular, we care that the second character
@@ -40,6 +40,13 @@
 (define illegal-chars (list #\. #\+ #\- #\& #\* #\!))
 (define (illegal-symbol? symb)
   (member (string-ref (symbol->string symb) 1) illegal-chars))
+
+(define elm? vector?)
+(define mkElm vector)
+(define (elmRef elm n) (vector-ref elm n))
+(define elmLen vector-length)
+(define elmCopy vector-copy)
+(define (elmSet elm n val) (vector-set! elm n val))
 
 ; meta-test for symbolicity
 ; give it the symbol sigil and it
@@ -62,9 +69,10 @@
 ; give it symbol and length of representation
 (define (x-symbol-elm? sym len)
   (lambda (elm)
-    (and (list? elm)
-         (= len (length elm))
-         (equal? (mklvivtag sym) (car elm)))))
+    (and (elm? elm)
+         (= len (elmLen elm))
+         (equal? (mklvivtag sym)
+                 (elmRef elm 0)))))
 
 ; static symbol functions
 (define static-symbol? (x-symbol? #\&))
@@ -72,11 +80,12 @@
 (define (mkStaticSymbolElm symb env)
   (if (illegal-symbol? symb) ; make sure it's legal
     (eLeft "illegal symbol") ; oops
-    (list (mklvivtag '&) (static-symbol->symbol symb) (object->serial-number env))))
+    (mkElm (mklvivtag '&) (static-symbol->symbol symb) env)))
 (define static-symbol-elm? (x-symbol-elm? '& 3))
-(define (static-symbol-env symb) (serial-number->object (caddr symb)))
-(define (static-symbol-sn symb) (caddr symb))
-(define static-symbol-sym cadr)
+(define (static-symbol-env elm) (elmRef elm 2))
+(define (static-symbol-sn  elm) (object->serial-number
+                                  (static-symbol-env elm)))
+(define (static-symbol-sym elm) (elmRef elm 1))
 
 ; position symbol functions
 (define posn-symbol? (x-symbol? #\!))
@@ -88,16 +97,17 @@
                   (= nNum (number->int nNum))
                   (>= nNum 0)))
       (eLeft "positional ref must be a non-negative integer")
-      (list (mklvivtag '!) (posn-symbol->symbol symb)))))
+      (mkElm (mklvivtag '!) (posn-symbol->symbol symb)))))
 (define posn-symbol-elm? (x-symbol-elm? '! 2))
-(define posn-symbol-sym cadr)
+(define (posn-symbol-sym elm) (elmRef elm 1))
 
 ; quote symbol functions
 (define quote-symbol? (x-symbol? #\*))
 (define (mkQuoteSymbolElm symb)
-  (if (illegal-symbol? symb) ; make sure it's legal
-    (eLeft "illegal symbol") ; oops
-    (quote-symbol->symbol symb)))
+;  (if (illegal-symbol? symb) ; make sure it's legal
+;    (eLeft "illegal symbol") ; oops
+;***I think quotes should be OK as long as they parse
+    (quote-symbol->symbol symb));)
 (define quote-symbol->symbol x-symbol->symbol)
 (define quote-symbol-elm? symbol?)
 
@@ -110,47 +120,45 @@
                                (quote-symbol-elm? item)))
 
 ; stackops in AST
-(define (mkStackOpElm op name) (list (mklvivtag 'stackop) op name))
-(define (stackOpElm? op)
-  (and (list? op) (= (length op) 3) (equal? (mklvivtag 'stackop) (car op))))
-(define stackOpElm->stackop cadr)
-(define stackOpElm-sym caddr)
+(define (mkStackOpElm op name) (mkElm (mklvivtag 'stackop) op name))
+(define stackOpElm? (x-symbol-elm? 'stackop 3))
+(define (stackOpElm->stackop elm) (elmRef elm 1))
+(define (stackOpElm-sym elm) (elmRef elm 2))
 
 ; thunks in AST
 (define (mkThunkElm op)
-  (cons (mklvivtag 'thunk)
-        (if (list? op)
-          op
-          (list op))))
-(define (thunkElm? op)
-  (and (pair? op) (equal? (mklvivtag 'thunk) (car op))))
-(define thunkElm->elm cdr)
+  (mkElm (mklvivtag 'thunk)
+         (if (list? op)
+           op
+           (list op))))
+(define thunkElm? (x-symbol-elm? 'thunk 2))
+(define (thunkElm->elm elm) (elmRef elm 1))
 
 ; make a lambda to stick in the env
 (define (mkLambda code args env)
-  (list (mklvivtag 'lambda) args code (object->serial-number env) #f))
-(define (lambda? obj)
-  (and (list? obj) (= (length obj) 5) (equal? (car obj) (mklvivtag 'lambda))))
+  (mkElm (mklvivtag 'lambda) args code env #f))
+(define lambda? (x-symbol-elm? 'lambda 5))
 ; reverse order of application
 (define (lambda-reverse binding)
-  (reverse (cons (not (lambda-reverse? binding)) (cdr (reverse binding)))))
-(define (lambda-reverse? x) (list-ref x 4))
-(define lambda-args cadr)
-(define lambda-code caddr)
-(define (lambda-env obj) (serial-number->object (car (cdddr obj))))
+  (let ((newElm (elmCopy binding)))
+    (elmSet newElm 4 (not (lambda-reverse? binding)))
+    newElm))
+(define (lambda-args elm) (elmRef elm 1))
+(define (lambda-code elm) (elmRef elm 2))
+(define (lambda-env  elm) (elmRef elm 3))
+(define (lambda-reverse? elm) (elmRef elm 4))
 
 ; make a primitive binding to stick in the env
 (define (mkPrimBinding id arity)
-  (list (mklvivtag 'primitive) arity id #f))
-
+  (mkElm (mklvivtag 'primitive) arity id #f))
+(define primitive? (x-symbol-elm? 'primitive 4))
 ; change a binding to its reverse
 (define (prim-reverse binding)
-  (reverse (cons (not (primitive-reverse? binding)) (cdr (reverse binding)))))
-
+  (let ((newElm (elmCopy binding)))
+    (elmSet newElm 3 (not (primitive-reverse? binding)))
+    newElm))
 ; primitives
-(define primitive-arity cadr)
-(define primitive-id caddr)
-(define primitive-reverse? cadddr)
-(define (primitive? obj)
-  (and (list? obj) (= (length obj) 4) (equal? (car obj) (mklvivtag 'primitive))))
+(define (primitive-arity elm) (elmRef elm 1))
+(define (primitive-id elm) (elmRef elm 2))
+(define (primitive-reverse? elm) (elmRef elm 3))
 

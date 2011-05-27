@@ -196,15 +196,17 @@
 
 (testLookup 'cdr (mkPrimBinding 'cdr 1))
 
-((applyMap lvivState) '(() :cons :cons (-) :append (*a *b) lambda apply))
+((applyMap lvivState) '(() cons cons (-) append (*a *b) lambda apply))
 (testStack '(1) "stack is in wrong state after lambda")
 
-((applyMap lvivState) '((&a +) :cons thunk apply))
+((applyMap lvivState) '((&a +) cons thunk apply))
 (testStack '(7) "stack is in wrong state after thunk")
-
-((applyMap lvivState) '(1 dropN))
-(testStack '() "stack should have been empty")
 
 ((applyMap lvivState) '(*a undef))
 (test (eLeft? (stEnvLookupBinding lvivState 'a)) "a still bound after undef?")
 
+((applyMap lvivState) '(*a define))
+((applyMap lvivState) '((&b &a *a * +) ((*a . (&a 2 +))) let))
+(testStack '(65) "stack is in wrong state after let")
+
+((applyMap lvivState) '(drop))

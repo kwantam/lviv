@@ -30,7 +30,7 @@
 
 (define (stLambdaCall state binding)
   (if (null? (lambda-code binding)) (eRight '())
-  (let* ((rfunc (if (lambda-reverse? binding) values reverse))
+  (let* ((rfunc (if (lambda-reverse? binding) reverse values))
          (fnArgNames (lambda-args binding))
          (fnNArgs (length fnArgNames))
          (fnArgs (delay (stStackNPop state fnNArgs)))
@@ -72,7 +72,7 @@
 ; for calls that require it, and to us it's just one monolithic
 ; call
 (define (stPrimCall state binding)
-  (let* ((rfunc (if (primitive-reverse? binding) values reverse))
+  (let* ((rfunc (if (primitive-reverse? binding) reverse values))
          (fnNArgs (delay (primitive-arity binding)))
          (fnArgs (delay (stStackNPop state (force fnNArgs))))
          (fnCompResult

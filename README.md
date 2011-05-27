@@ -16,20 +16,40 @@ Let's look at some example code so you know what you're getting yourself into.
 
 #### factorial
 
-    > ((1) (*x 1 *x - *fact *) *x 0 eq? if) (*x) lambda *fact define
+    > ((1) (*x dup 1 - *fact *) *x 0 eq? if) (*x) lambda *fact define
     > 5 fact
     120
 
 #### fibonacci
 
-    > ((swap drop) (dup 3 roll + 1 *x - *fibHlp) *x 0 eq? if) (*x) lambda *fibHlp define
-    > ((0) (0 1 1 *x - *fibHlp) 1 *x < if) (*x) lambda *fib define
+    > ((swap drop) (dup 3 roll + *x 1 - *fibHlp) *x 0 eq? if) (*x) lambda *fibHlp define
+    > ((0) (0 1 *x 1 - *fibHlp) *x 1 < if) (*x) lambda *fib define
     > 5 fib
     5
     > 15 fib
     610
     > 25 fib
     75025
+
+We could also do this with the helper defined inside the parent environment:
+
+    > ( ((swap drop) (dup 3 roll + **x 1 - *fibHlp) **x 0 eq? if) (**x) lambda *fibHlp define (0) (0 1 *x 1 - *fibHlp) *x 1 < if ) (*x) lambda *fib define
+    > 25 fib
+    75025
+
+Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes.
+
+#### Accumulator
+
+We define two functions, showA and incA, that show and increment the value of an accumulator, respectively. Note that both functions close over a private environment.
+
+    > ( (**n) () lambda (1 **n + **nref define) () lambda *&n *nref define 1 *n define ) () lambda apply *incA define *readA define
+    > readA
+    1
+    > drop incA incA incA readA
+    4
+    > drop incA incA incA readA
+    7
 
 ## Basics
 
@@ -49,11 +69,9 @@ If you've used an HP calculator, you're probably familiar with how RPN works. Ex
 
 ### Order of application
 
-By convention, RPN operations are applied in conventional order: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5. This seems somewhat logical for a calculator, since it matches our intuition for the basic noncommutative arithmetic operations.
+RPN operations are applied in left-to-right order: prefix and postfix notation are related by simply translating the operator from the beginning to the end of the expression. `- 6 1` becomes `6 1 -`, and both should equal 5. This seems somewhat logical for a calculator, since it matches our intuition for the basic noncommutative arithmetic operations.
 
-Unfortunately, this order seems (to me) pretty clunky when recursively applying operations that consume and return multiple values. In this context, it seems more sensible to think of function application as repeatedly applying stack values to a curried function until it returns a value. (lviv functions are not automatically curried like Haskell functions, so perhaps one could succesfully argue that I only think this way because I write too much Haskell.)
-
-By convention, all operations in lviv use reflected-prefix application order. However, functions can be applied in reverse by prepending them with `:`. Thus, `6 1 -` yields `-5`, but `6 1 :-` gives `5` as expected by someone used to an RPN calculator.
+At times, this order of operations can be clunky. Thus, any primitive or lambda can be applied in reverse by prepending it with `:`. Thus, `6 1 -` yields `5`, and `6 1 :-` gives `-5`.
 
 ## Stack operations
 
@@ -197,16 +215,16 @@ Formally, a list is defined either as the empty list (`nil` or `()`), or as the 
 
     > nil
     ()
-    > 1 cons
+    > 1 :cons
     (1)
-    > 2 cons
+    > 2 :cons
     (2 1)
-    > (3 4) :append
+    > (3 4) append
     (2 1 3 4)
     > uncons
     (1 3 4)
     2
-    > cons
+    > :cons
     (2 1 3 4)
     > cdr
     (1 3 4)
@@ -239,11 +257,11 @@ When a bound variable is placed on the stack, it is immediately replaced by its 
     > 2 z
     2
     1
-    > :-
+    > -
     1
-    > (&z +) :cons thunk
+    > (&z +) cons thunk
     #<thunk ( 1 &z + )>
-    > 2 z define
+    > 2 *z define
     #<thunk ( 1 &z + )>
     > apply
     3
@@ -276,7 +294,8 @@ To cause its contents to be computed as if entered at the prompt, a list must be
     > *a
     a
     > eval
-    > (*a 2) :cons
+    1
+    > (*a 2) cons
     (1 a 2)
     > 4 *a define
     (1 a 2)
@@ -290,14 +309,14 @@ Other than when working on thunks, `apply` takes the top element off the list an
     > 1 apply
     (1 4 2)
     1
-    > *cons
+    > *:cons
     (1 4 2)
     1
-    cons
+    :cons
     > apply
     (1 4 2)
     1
-    cons
+    :cons
     > eval
     (1 4 2)
     1
@@ -360,15 +379,15 @@ Positional identifiers are identifiers of the form `![0-9]+` which are unbound u
 
 `lambda` combines a delayed computation and a binding list into a function. Positional identifiers cannot be used with a `lambda`.
 
-Binding lists map variables inside the thunk to positions on the stack at application time. List elements are numbered from left to right starting at 0.
+Binding lists map variables inside the thunk to positions on the stack at application time.
 
     > *x
     x
-    > (1 +) :cons
+    > (1 +) cons
     ( x 1 #<primitive +> )
-    > (*y *) :append
+    > (*y *) append
     ( x 1 #<primitive +> y #<primitive *> )
-    > (*y *x) lambda *xyfunc define
+    > (*x *y) lambda *xyfunc define
     > 2 1
     2
     1
@@ -377,7 +396,7 @@ Binding lists map variables inside the thunk to positions on the stack at applic
     > 2 *xyfunc eval
     3
     2
-    #<lambda ( x 1 #<primitive +> y #<primitive *> ) ( y x )>
+    #<lambda ( x 1 #<primitive +> y #<primitive *> ) ( x y )>
     > apply
     8
 
@@ -401,9 +420,9 @@ The above lambda is equivalent to
     8
     > 6 *z define
     8
-    > (*z +) :cons
+    > (*z +) cons
     ( 8 z + )
-    > (*a *) :append ( (a . 1) ) let
+    > (*a *) append ( (a . 1) ) let
     14
 
 ### `<consequent> <alternative> <test> if`, `<consequent> <alternative> <test> unless`
