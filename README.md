@@ -39,7 +39,7 @@ We could also do this with the helper defined inside the parent environment:
     > 25 fib
     75025
 
-Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes. In general, if you want to delay evaluation until the environment inside *n* levels of parens, add *n* stars. If you want the bare identifier after *n* levels of parens, add *n+1* stars like `**fibHlp` above.
+Note that the `x` in the scope of the inner lambda needs to be double-quoted (`**x`) because we want its interpolation delayed until the inner lambda executes. In general, the number of stars is *paren-depth*&#150;*if-paren-depth* if you want the variable's value, or *paren-depth*&#150;*if-paren-depth*+1 if you want the literal name.
 
 #### Accumulator
 
@@ -54,6 +54,8 @@ We define two functions, showA and incA, that show and increment the value of an
     4
     > drop incA incA incA readA
     7
+
+Note how here we quote `*&n` to delay its binding until it is evaluated in the environment of the outermost lambda.
 
 ## Basics
 
