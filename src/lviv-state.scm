@@ -28,20 +28,22 @@
 
 ; an empty stack
 (define mkEmptyStack (lambda () '()))
+(define mkEmptyStackBox (lambda () (cons (mkEmptyStack) '())))
 
 ; an empty environment
 (define mkEmptyEnv (lambda () (cons '() '())))
 
 ; an interpreter state is just (stack . env)
-(define mkEmptyState (lambda () (cons (mkEmptyStack) (mkEmptyEnv))))
+(define mkEmptyState (lambda () (cons (mkEmptyStackBox) (mkEmptyEnv))))
 
 ; retrieve stack from the state
-(define stGetStack car)
+(define stGetStack caar)
+(define stGetStackBox car)
 
 ; retrieve env from the state
 (define stGetEnv cdr)
 
 ; update environment
 (define (stUpdateEnv oldState newEnv) (set-cdr! oldState newEnv))
-(define (stUpdateStack oldState newStack) (set-car! oldState newStack))
+(define (stUpdateStack oldState newStack) (set-car! (car oldState) newStack))
 

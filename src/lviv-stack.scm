@@ -294,8 +294,8 @@
                (list (force fnxCode)))))
          (fnCodeParts (delay (splitAt (- (length (force fnCode)) 1) ; split code for
                                       (force fnCode))))     ; tail call optimization
-         (fnState (begin (delay (cons (stGetStack state)    ; make a new state for the let
-                                      (envNewChild (stGetEnv state))))))
+         (fnState (delay (cons (stGetStackBox state)    ; make a new state for the let
+                               (envNewChild (stGetEnv state)))))
          (fnCompResult                                      ; run the first part of the code
            (lambda ()
              (eRight ((applyMap (force fnState))
@@ -345,8 +345,8 @@
           ; this is an "else" since stUpdateStack always returns a true value
           ; update the stack with whatever new values from the let, then run
           ; the final computation
-          ((stUpdateStack state (stGetStack (force fnState)))
-           (lviv-apply state (force fnLastEval))))))
+          (else
+            (lviv-apply (force fnState) (force fnLastEval))))))
 
 ; bind a stackop function to a symbol,
 ; make a test that returns the function when

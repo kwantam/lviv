@@ -38,9 +38,10 @@
            (splitAt (- (length (lambda-code binding)) 1)    ; take the last call in the lambda
                     (lambda-code binding)))                 ; apply it in tail position
          (lambdaState                                       ; state during the lambda
-           (delay (cons (stGetStack state)
-                        (cons (zip fnArgNames (rfunc (fromLeftRight (force fnArgs))))
-                              (lambda-env binding)))))
+           (delay 
+             (cons (stGetStackBox state) 
+                   (cons (zip fnArgNames (rfunc (fromLeftRight (force fnArgs))))
+                         (lambda-env binding)))))
          (fnCompResult                                      ; apply all but last piece of code
            (lambda ()
              (eRight ((applyMap (force lambdaState))
@@ -63,8 +64,8 @@
           ; so we first update the stack, then we call the already evaluated call
           ; from the lambda in the original state, which gets the last call into
           ; tail position
-          ((stUpdateStack state (stGetStack (force lambdaState)))
-           (lviv-apply state (force fnFinalEval))))))) ; tail call
+          (else
+            (lviv-apply (force lambdaState) (force fnFinalEval))))))) ; tail call
 
 ; primitive call
 ; no tail call optimization necessary here; Scheme will do it
