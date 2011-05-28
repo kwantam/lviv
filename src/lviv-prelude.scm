@@ -29,18 +29,57 @@
 
 (define lvivState (mkEmptyState))
 
-((applyMap lvivState) '(3.141592653589793238462643 *pi define))
+(define (lviv-define-prim x arity . name)
+  (if (null? name)
+    ((applyMap lvivState) (quasiquote (,arity ,x primitive ,x define)))
+    (let ((cName (car name)))
+      ((applyMap lvivState) (quasiquote (,arity ,x primitive ,cName define))))))
+(define (lviv-define-val x val)
+  ((applyMap lvivState) (quasiquote (,val ,x define))))
 
-((applyMap lvivState) '(2 + primitive + define))
-((applyMap lvivState) '(2 - primitive - define))
-((applyMap lvivState) '(2 / primitive / define))
-((applyMap lvivState) '(2 * primitive * define))
-((applyMap lvivState) '(2 cons primitive cons define))
-((applyMap lvivState) '(2 eq? primitive eq? define))
-((applyMap lvivState) '(2 expt primitive expt define))
-((applyMap lvivState) '(1 sqrt primitive sqrt define))
-((applyMap lvivState) '(2 append primitive append define))
-((applyMap lvivState) '(2 *< primitive *< define))
+(lviv-define-val 'pi 3.141592653589793238462643)
+(lviv-define-val 'nil '())
+
+(lviv-define-prim '+ 2)
+(lviv-define-prim '- 2)
+(lviv-define-prim '/ 2)
+(lviv-define-prim '* 2)
+
+(define (inv x) (/ 1 x)) (lviv-define-prim 'inv 1)
+(lviv-define-prim 'modulo 2 'mod)
+
+(define (chs x) (* -1 x))
+(lviv-define-prim 'chs 1 'neg)
+(lviv-define-prim 'chs 1)
+(lviv-define-prim 'abs 1)
+
+(lviv-define-prim 'ceiling 1 'ceil)
+(lviv-define-prim 'floor 1)
+(lviv-define-prim 'number->int 1 'int)
+
+(define (frac x) (- x (number->int x)))
+(lviv-define-prim 'frac 1)
+
+(define (pct y x) (* (/ y 100) x))
+(lviv-define-prim 'pct 2 '%)
+
+(define (pctOf y x) (* 100 (/ x y)))
+(lviv-define-prim 'pctOf 2 '%t)
+
+(define (pctCh y x) (* 100 (/ (- x y) y)))
+(lviv-define-prim 'pctCh 2 '%ch)
+
+(lviv-define-prim 'eq? 2)
+(lviv-define-prim '< 2)
+(lviv-define-prim '> 2)
+(lviv-define-prim '<= 2)
+(lviv-define-prim '>= 2)
+
+(lviv-define-prim 'expt 2 '^)
+(lviv-define-prim 'sqrt 1)
+
+(lviv-define-prim 'append 2)
+(lviv-define-prim 'cons 2)
 
 (define (add-cxrs state n)
   (letrec ((nums (take n '(1 2 4 8 16)))
@@ -66,7 +105,3 @@
 (add-cxrs lvivState 3)
 (add-cxrs lvivState 2)
 (add-cxrs lvivState 1)
-
-(stEnvUpdateBinding lvivState (cons 'nil '()))
-
-
