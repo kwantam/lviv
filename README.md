@@ -203,6 +203,10 @@ Does nothing. It is useful for operations that conditionally modify the stack.
 
 Shows the current environment. It can be useful for debugging.
 
+### `stk`
+
+Print the current stack. This is useful during batch execution.
+
 ### Mathematical operations
 
 All mathematical functions available in Scheme can be bound as primitives in lviv. These should be bound in the prelude when I get around to it :)

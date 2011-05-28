@@ -415,6 +415,6 @@
       ((stackOp? 'tstk stTStk) op)
       ((stackOp? 'untstk (stUnTStk #f)) op)
       ((stackOp? 'rtstk (stUnTStk #t)) op)
-      ((stackOp? 'pstk stPrintStack) op)
+      ((stackOp? 'stk stPrintStack) op)
       ))
 
