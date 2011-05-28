@@ -210,3 +210,5 @@
 (testStack '(65) "stack is in wrong state after let")
 
 ((applyMap lvivState) '(drop))
+
+((applyMap lvivState) '(*a *b *c *e undef undef undef undef))

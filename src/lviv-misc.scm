@@ -134,8 +134,7 @@
   (if (or (= n 0) (null? lst)) lst (iterateNOrNull f (- n 1) (f lst))))
 
 ; general number to integer
-(define (rtz num) (if (< num 0) (ceiling num) (floor num)))
-(define (number->int num) (inexact->exact (rtz num)))
+(define (number->int num) (inexact->exact (truncate num)))
 
 ; rollN circular shifts the first few elements of a stack
 ; first element becomes second, et cetera
