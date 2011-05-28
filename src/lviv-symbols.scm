@@ -87,20 +87,6 @@
                                   (static-symbol-env elm)))
 (define (static-symbol-sym elm) (elmRef elm 1))
 
-; position symbol functions
-(define posn-symbol? (x-symbol? #\!))
-(define posn-symbol->symbol x-symbol->symbol)
-(define (mkPosnRefElm symb)
-  (let ((nNum (string->number 
-                (list->string (cdr (string->list (symbol->string symb)))))))
-    (if (not (and nNum
-                  (= nNum (number->int nNum))
-                  (>= nNum 0)))
-      (eLeft "positional ref must be a non-negative integer")
-      (mkElm (mklvivtag '!) (posn-symbol->symbol symb)))))
-(define posn-symbol-elm? (x-symbol-elm? '! 2))
-(define (posn-symbol-sym elm) (elmRef elm 1))
-
 ; quote symbol functions
 (define quote-symbol? (x-symbol? #\*))
 (define (mkQuoteSymbolElm symb)

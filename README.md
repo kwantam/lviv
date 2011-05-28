@@ -344,26 +344,6 @@ lviv represents delayed computations using thunks. The `apply` function unwraps 
     > 15 + *z define apply
     19
 
-### Positional identifiers *NOT YET IMPLEMENTED*
-
-Positional identifiers are identifiers of the form `![0-9]+` which are unbound until evaluated. In a thunk, these identifiers represent the corresponding stack positions at the time the thunk is evaluated.
-
-    > 1 !0
-    1
-    !0
-    > eval
-    1
-    > (!0 1 +) thunk
-    1
-    #<thunk ( !0 1 #<primitive +> )>
-    > 2 swap
-    1
-    2
-    #<thunk ( !0 1 #<primitive +> )>
-    > eval
-    1
-    3
-
 ### `<arity> <identifier> primitive`
 
 `primitive` is used to bind an underlying scheme operation into a lviv element. For example,

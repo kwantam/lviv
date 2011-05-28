@@ -71,8 +71,6 @@
                          (fromLeftRight lkRef))))))
     (cond ((static-symbol? item) ; &foo -> (& foo env)
            (mkStaticSymbolElm item (stGetEnv state)))
-          ((posn-symbol? item)   ; !1   -> (! 1)
-           (eLeft "not implemented"))
           ((quote-symbol? item)  ; *bar -> bar
            (mkQuoteSymbolElm item))
           ((reverse-symbol? item) ; :cons -> cons in reverse
@@ -84,7 +82,6 @@
                    (else (eLeft "can only reverse lambda or primitive")))))
           ((static-symbol-elm? item) (lookupElm (static-symbol-env item)
                                                 (static-symbol-sym item)))
-          ((posn-symbol-elm? item) (eLeft "not implemented"))
           ((stStackOp? item) (mkStackOpElm (stStackOp? item) item)) ; stackOp
           ((symbol? item)        ; look up symbol in present env
            (let ((iLBind (stEnvLookupBinding state item)))
@@ -152,10 +149,6 @@
                                  (display "(env#")
                                  (display (static-symbol-sn elm))
                                  (display ")")
-                                 (newln)))
-                         ((posn-symbol-elm? elm)
-                          (begin (display "!")
-                                 (display (posn-symbol->symbol elm))
                                  (newln)))
                          ((stackOpElm? elm)
                           (begin (display "#<stackOp ")
