@@ -2,6 +2,10 @@
 
 lviv is a functional stack-based programming language. Or maybe it's just a fancy programmable calculator.
 
+lviv is written in Scheme. It's possible that it will work in a bunch of different Scheme environments, but I use Gambit-C Scheme v4.6.1 for development, so I don't guarantee that it'll work in any other scheme interpreter.
+
+lviv is an experiment in hybrid functional-stack language design. The idea was to have a very regular syntax that was 100% compatible with postfix notation without requiring a modal interpreter (i.e., no ": ... ;" stuff like in FORTH; this means that everything, including `lambda`, `define`, `if`, `let`, et cetera, uses postfix notation) and with a minimal number of special forms. The original impetus came from a paper I read about how tail call optimization happens very naturally when the machine model is stack based. Naturally, lviv supports tail call optimization.
+
 The name comes from the city of Lviv, where Jan Lukasiewicz was born. Lukasiewicz invented prefix or "Polish" notation to simplify the syntax of sentential logic; later, Burks, Warren, and Wright (and even later Bauer and Dijkstra) proposed postfix, or "reverse Polish" notation as a good fit for stack based machines.
 
 ## Examples
