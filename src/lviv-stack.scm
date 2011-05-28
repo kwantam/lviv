@@ -237,8 +237,7 @@
 
 ; env prints out the environment
 (define (stEnv state)
-  (begin (pp (stGetEnv state))
-         (newline)
+  (begin (lviv-ppenv (stGetEnv state))
          (eRight '())))
 
 ; turn some code and a binding list into a lambda
@@ -370,6 +369,12 @@
               (stUpdateStackBox 
                 state (cdr (stGetStackBox state))))))))
 
+(define (stPrintStack state)
+  (lviv-ppstack (stGetStack state)
+                (stEnvLookupBinding
+                  state
+                  '_stack_display_depth)))
+
 ; bind a stackop function to a symbol,
 ; make a test that returns the function when
 ; given the symbol
@@ -410,6 +415,6 @@
       ((stackOp? 'tstk stTStk) op)
       ((stackOp? 'untstk (stUnTStk #f)) op)
       ((stackOp? 'rtstk (stUnTStk #t)) op)
+      ((stackOp? 'pstk stPrintStack) op)
       ))
-
 

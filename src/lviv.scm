@@ -1,3 +1,4 @@
+#!/usr/bin/env gsi-script
 ;
 ;Copyright (c) 2011 Riad S. Wahby <rsw@jfet.org>
 ;
@@ -32,5 +33,38 @@
 (include "lviv-prelude.scm")
 (include "lviv-tests.scm")
 
-(lviv-repl lvivState #f)
+; go through each arg in the arglist
+; - means run a repl
+;
+(define (lviv-process-args arglist)
+  (cond ((null? arglist) #f)
+        ((equal? "-" (car arglist))
+         (lviv-repl lvivState #f)
+         (lviv-process-args (cdr arglist)))
+        (else
+          (lviv-file lvivState (car arglist))
+          (lviv-process-args (cdr arglist)))))
 
+; decide how to proceed based on commandline
+; if a -- is supplied, ignore all args before it
+; otherwise, attempt to open and eval all args
+; other than the 0th
+; this mimics the difference between script mode
+; and batch mode in gsi
+(let ((c--line (member "--" (command-line)))
+      (c1line (cdr (command-line))))
+  (cond ((null? c1line) ; no arguments at all
+         (display "welcome to lviv\n\n")
+         (lviv-repl lvivState #f))
+        ((not c--line) ; didn't find -- delimiter
+         (lviv-process-args c1line))
+        ((null? (cdr c--line)) ; found --, if it's last arg just do repl
+         (display "welcome to lviv\n\n")
+         (lviv-repl lvivState #f))
+        ; otherwise process args after --
+        (else
+          (lviv-process-args (cdr c--line)))))
+
+; print the stack before we exit
+(define (main . foo)
+  (stPrintStack lvivState))
