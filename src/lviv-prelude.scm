@@ -79,8 +79,33 @@
 (lviv-define-prim 'sqrt 1)
 (lviv-define-prim 'exp 1)
 (lviv-define-prim 'log 1 'ln)
-(define (expm1 x) (- (exp x) 1)) (lviv-define-prim 'expm1 1)
-(define (lnp1 x) (+ (log x) 1)) (lviv-define-prim 'lnp1 1)
+
+(define n1toN (fromTo 1 100)) ; waaaaaaaaaay overkill
+(define invFacts (scanl (lambda (y x) (/ y x)) 1 n1toN))
+(define invEONeg (map (lambda (x) (/ (if (even? x) -1 1) x)) n1toN))
+
+(define (expm1 x) ; use taylor expansion of e^x near 0 to reduce numerical error
+  (if (< (abs x) 0.19)
+    (letrec ((expm1Hlp
+               (lambda (expts iFacts)
+                 (if (null? expts) 0
+                   (+ (* (expt x (car expts)) (car iFacts))
+                      (expm1Hlp (cdr expts) (cdr iFacts)))))))
+      (+ x (expm1Hlp (cdr n1toN) (cdr invFacts))))
+    (- (exp x) 1)))
+(lviv-define-prim 'expm1 1)
+
+(define (lnp1 x) ; use taylor expansion of ln(1+x) near 0 to reduce numerical error
+  (if (< (abs x) 0.19)
+    (letrec ((lnp1Hlp
+               (lambda (expts quots)
+                 (if (null? expts) 0
+                   (+ (* (expt x (car expts)) (car quots))
+                      (lnp1Hlp (cdr expts) (cdr quots)))))))
+      (+ x (lnp1Hlp (cdr n1toN) (cdr invEONeg))))
+    (log (+ x 1))))
+(lviv-define-prim 'lnp1 1)
+
 (define ln10 (log 10)) (define (log10 x) (/ (log x) ln10)) (lviv-define-prim 'log10 1 'log)
 (define (alog x) (expt 10 x)) (lviv-define-prim 'alog 1)
 (lviv-define-prim 'sin 1)

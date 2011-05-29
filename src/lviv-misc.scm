@@ -25,13 +25,27 @@
 ; **************
 ; miscellaneous functions
 
+; fromTo
+; make a list from x to y
+(define (fromTo x y)
+  (if (>= x y) '() (cons x (fromTo (+ x 1) y))))
+
 ; foldl
 ; like the Haskell function
-; foldl1 :: (a->b->a) -> a -> [b] -> a
+; foldl :: (a->b->a) -> a -> [b] -> a
 (define (foldl f init ls)
   (if (null? ls)
     init
     (foldl f (f init (car ls)) (cdr ls))))
+
+; scanl
+; like the Haskell function
+; scanl :: (a->b->a) -> a -> [b] -> a
+(define (scanl f init ls)
+  (if (null? ls)
+    '()
+    (let ((ninit (f init (car ls))))
+      (cons ninit (scanl f ninit (cdr ls))))))
 
 ; zipWith
 ; like the Haskell function
