@@ -145,6 +145,24 @@
 ; default stack display depth
 (define _stack_display_depth 10)
 
+; engineering notation
+(define (eng num)
+  (let ((x (or (and (number? num) num) (string->number num))))
+    (if (not x)
+      (raise "type exception")
+      (let* ((xxpon (xpon x))
+             (x3pon (* 3 
+                       (- (quotient xxpon 3)
+                          (if (and
+                                (< xxpon 0)
+                                (not (zero? (remainder xxpon 3))))
+                            1 0))))
+             (xmant (/ x (expt 10 x3pon))))
+        (string-append (number->string 
+                         (exact->inexact (rnd xmant 12)))
+                       "e"
+                       (number->string x3pon))))))
+
 ; prettyprint for lviv elements
 (define (lviv-pp newline?)
   (lambda (elm)
@@ -193,6 +211,11 @@
                     (display ". ")
                     ((lviv-pp #f) (cdr elm))
                     (display " )")
+                    (newln)))
+            ((and (number? elm)
+                  (or (and (inexact? elm) (> (abs (xpon elm)) 3))
+                      (> (abs (xpon elm)) 6)))
+             (begin (display (eng elm))
                     (newln)))
             (else
               (begin (display elm)
