@@ -216,6 +216,16 @@
     (cons (eLeft "thunk: stack empty"))))
 (define (stStackThunk state) (stStackUpd2 stackThunk state))
 
+; turn a thunk back into its code
+(define (stUnThunk state)
+  (let* ((fnLArg (stStackPop state))
+         (fnArg (fromLeftRight fnLArg)))
+    (cond ((eLeft? fnLArg) fnLArg)
+          ((thunkElm? fnArg)
+           (stStackPush state (thunkElm->elm fnArg)))
+          (else
+            (rewind state (list fnArg) "not a thunk")))))
+
 ; if
 ; <consequent> <alternative> <bool> if
 (define (stIf state)
@@ -264,6 +274,18 @@
                    "arglist must be quoted symbols"))
           (else
             (eRight (stStackPush state (force fnLambda)))))))
+
+; take the code and args from a lambda
+; and put them on a stack
+(define (stUnLambda state)
+  (let* ((fnLArg (stStackPop state))
+         (fnArg (fromLeftRight fnLArg)))
+    (cond ((eLeft? fnLArg) fnLArg)
+          ((lambda? fnArg)
+           (stStackPush state (lambda-code fnArg))
+           (stStackPush state (lambda-args fnArg)))
+          (else
+            (rewind state (list fnArg) "not a lambda")))))
 
 ; as above, but creates a primitive binding.
 (define (stPrimitive state)
@@ -405,7 +427,9 @@
       ((stackOp? 'eval stEval) op)
       ((stackOp? 'apply stApply) op)
       ((stackOp? 'thunk stStackThunk) op)
+      ((stackOp? 'unthunk stUnThunk) op)
       ((stackOp? 'lambda stLambda) op)
+      ((stackOp? 'unlambda stUnLambda) op)
       ((stackOp? 'primitive stPrimitive) op)
       ((stackOp? 'if stIf) op)
       ((stackOp? 'unless stUnless) op)

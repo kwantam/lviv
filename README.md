@@ -338,7 +338,7 @@ Other than when working on thunks, `apply` takes the top element off the list an
     > apply
     ( 1 1 4 2 )
 
-### Thunks
+### `thunk`
 
 lviv represents delayed computations using thunks. The `apply` function unwraps a thunk and evaluates it as if its contents were typed into the REPL. Thunks are idempotent through `eval`, which means that their bindings are delayed until they are applied. This means that `thunk`s can introduce dynamic scoping: if a thunk is stored in a variable, it can be retrieved by two different functions. When applied, its scope is determined by the function it is called in, not by its definition scope.
 
@@ -351,6 +351,22 @@ lviv represents delayed computations using thunks. The `apply` function unwraps 
     3
     > 15 + *z define apply
     19
+
+### `unthunk`
+
+A thunk on the stack can be turned back into its constituent code with `unthunk`.
+
+    > (1 2 +) thunk
+    #<thunk ( 1 2 #<primitive +> )>
+    > dup apply
+    #<thunk ( 1 2 #<primitive +> )>
+    3
+    > swap unthunk (3 *) append thunk
+    3
+    #<thunk ( 1 2 #<primitive +> 3 #<primitive *> )>
+    > apply
+    3
+    9
 
 ### `<arity> <identifier> primitive`
 
@@ -402,6 +418,30 @@ The above lambda is equivalent to
     #<thunk ( #<stackOp swap> 1 #<primitive +> #<stackOp swap> #<primitive *> )>
     > apply
     3
+
+### `<lambda> unlambda`
+
+Like `unthunk`, `unlambda` lets you break open a lambda and do stuff to it.
+
+    > (1 *a +) (*a) lambda dup
+    #<lambda ( 1 a #<primitive +> ) ( a )>
+    #<lambda ( 1 a #<primitive +> ) ( a )>
+    > 3 swap apply
+    #<lambda ( 1 a #<primitive +> ) ( a )>
+    4
+    > swap unlambda
+    4
+    ( 1 a #<primitive +> )
+    ( a )
+    > (*b) append swap
+    4
+    ( a b )
+    ( 1 a #<primitive +> )
+    > (*b *) append swap lambda
+    4
+    #<lambda ( 1 a #<primitive +> b #<primitive *> ) ( a b )>
+    > 5 swap apply
+    25
 
 ### `<code> <assoc-list> let`
 
