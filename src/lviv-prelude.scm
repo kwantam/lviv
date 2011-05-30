@@ -83,9 +83,10 @@
 (define n1toN (fromTo 1 100)) ; waaaaaaaaaay overkill
 (define invFacts (scanl (lambda (y x) (/ y x)) 1 n1toN))
 (define invEONeg (map (lambda (x) (/ (if (even? x) -1 1) x)) n1toN))
+(define m1^k (map (lambda (x) (if (even? x) 1 -1)) n1toN))
 
 (define (expm1 x) ; use taylor expansion of e^x near 0 to reduce numerical error
-  (if (< (abs x) 0.19)
+  (if (< (magnitude x) 0.19)
     (letrec ((expm1Hlp
                (lambda (expts iFacts)
                  (if (null? expts) 0
@@ -96,7 +97,7 @@
 (lviv-define-prim 'expm1 1)
 
 (define (lnp1 x) ; use taylor expansion of ln(1+x) near 0 to reduce numerical error
-  (if (< (abs x) 0.19)
+  (if (< (magnitude x) 0.19)
     (letrec ((lnp1Hlp
                (lambda (expts quots)
                  (if (null? expts) 0
@@ -126,18 +127,72 @@
 (define (vers x) (- 1 (cos x))) (lviv-define-prim 'vers 1)
 (define (hav x) (/ (vers x) 2)) (lviv-define-prim 'hav 1)
 
+; bernouilli numbers for estimating tanh
+; ** sinh(x)/cosh(x) is sufficiently accurate
+; ** so we'll just do that instead
+;(define maxBN 101)
+;(define n1toNBN (fromTo 1 maxBN))
+;(define bnL (list (map (lambda (x) (/ 1 x)) n1toNBN)))
+;(set-cdr! bnL (cons (cdar bnL) '()))
+;(define (updateNthBN n bn)
+;  (if (< (length bn) n) (raise "need predecessor")
+;    (set-cdr! (iterateN cdr (- n 1) bn)
+;              (cons (zipWith * n1toNBN (zipWith - (list-ref bn (- n 1))
+;                                                (cdr (list-ref bn (- n 1)))))
+;                    '()))))
+;(map (lambda (x) (updateNthBN x bnL)) (cdr n1toNBN))
+;(define bNums (reverse (map car (cdr (reverse bnL)))))
+;(define (everyOther ls)
+;  (if (or (null? ls) (null? (cdr ls)))
+;    '()
+;    (cons (car ls) (everyOther (cddr ls)))))
+;(define tanhFacts
+;  (zipWith
+;    * (everyOther (cddr bNums))
+;    (zipWith (lambda (x y) (* (- (expt 4 x) (expt 2 x))
+;                              y))
+;             (everyOther (cdr n1toNBN))
+;             (everyOther (cdr invFacts)))))
+
 ; hyperbolic functions
-(define (sinh x) (let ((expx (exp x))) (/ (- expx (inv expx)) 2)))
+(define (sinh x)
+  (if (< (magnitude x) 0.19)
+    (letrec ((sinhHlp
+               (lambda (expts iFacts)
+                 (if (or (null? expts) (null? (cdr expts))) 0
+                   (+ (* (expt x (car expts)) (car iFacts))
+                      (sinhHlp (cddr expts) (cddr iFacts)))))))
+      (+ x (sinhHlp (cddr n1toN) (cddr invFacts))))
+    (let ((expx (exp x))) (/ (- expx (inv expx)) 2))))
 (lviv-define-prim 'sinh 1)
-(define (cosh x) (let ((expx (exp x))) (/ (+ expx (inv expx)) 2)))
+(define (cosh x)
+  (if (< (magnitude x) 0.19) 
+    (letrec ((coshHlp
+               (lambda (expts iFacts)
+                 (if (or (null? expts) (null? (cdr expts))) 0
+                   (+ (* (expt x (car expts)) (car iFacts))
+                      (coshHlp (cddr expts) (cddr iFacts)))))))
+      (+ 1 (coshHlp (cdr n1toN) (cdr invFacts))))
+    (let ((expx (exp x))) (/ (+ expx (inv expx)) 2))))
 (lviv-define-prim 'cosh 1)
-(define (tanh x) (let ((exp2x (exp (* 2 x)))) (/ (- exp2x 1) (+ exp2x 1))))
+
+;(define (tanh x)
+;  (if (< (magnitude x) 0.19)
+;    (letrec ((tanhHlp
+;               (lambda (ks xps)
+;                 (if (null? ks) 0
+;                   (+ (* (car ks) (expt x (car xps)))
+;                      (tanhHlp (cdr ks) (cddr xps)))))))
+;      (+ x (tanhHlp (cdr tanhFacts) (cddr n1toN))))
+;    (let ((exp2x (exp (* 2 x)))) (/ (- exp2x 1) (+ exp2x 1)))))
+(define (tanh x) (/ (sinh x) (cosh x)))
 (lviv-define-prim 'tanh 1)
+
 (define (asinh x) (log (+ x (sqrt (+ (sq x) 1)))))
 (lviv-define-prim 'asinh 1)
 (define (acosh x) (log (+ x (sqrt (- (sq x) 1)))))
 (lviv-define-prim 'acosh 1)
-(define (atanh x) (/ (- (log (+ 1 x)) (log (- 1 x))) 2))
+(define (atanh x) (/ (- (lnp1 x) (lnp1 (chs x))) 2))
 (lviv-define-prim 'atanh 1)
 (define (sech x) (inv (cosh x)))
 (lviv-define-prim 'sech 1)
@@ -147,9 +202,9 @@
 (lviv-define-prim 'coth 1)
 (define (asech x) (log (/ (+ 1 (sqrt (- 1 (sq x)))) x)))
 (lviv-define-prim 'asech 1)
-(define (acsch x) (log (+ (inv x) (/ (sqrt (+ 1 (sq x))) (abs x)))))
+(define (acsch x) (log (+ (inv x) (/ (sqrt (+ 1 (sq x))) (magnitude x)))))
 (lviv-define-prim 'acsch 1)
-(define (acoth x) (/ (- (log (+ 1 (inv z))) (log (- 1 (inv z)))) 2))
+(define (acoth x) (/ (- (lnp1 (inv x)) (lnp1 (chs (inv x)))) 2))
 (lviv-define-prim 'acoth 1)
 
 ; complex number functions
@@ -185,9 +240,15 @@
 (lviv-define-prim 'sign 1)
 (define (psign x) (cond ((< x 0) -1) (else 1)))
 (lviv-define-prim 'psign 1)
-(define (xpon x) (inexact->exact (floor (/ (log (abs x)) ln10))))
+(define (xpon x)
+  (cond ((zero? x) 0)
+        ((and (real? x) (nan? x)) +nan.0)
+        ((and (real? x) (infinite? x)) 0)
+        (else (inexact->exact (floor (/ (log (magnitude x)) ln10))))))
 (lviv-define-prim 'xpon 1)
-(define (mant x) (/ x (expt 10 (xpon x))))
+(define (mant x)
+  (if (zero? x)
+    0 (/ x (expt 10 (xpon x)))))
 (lviv-define-prim 'mant 1)
 (lviv-define-prim 'inexact->exact 1 'exact)
 (lviv-define-prim 'exact->inexact 1 'inexact)

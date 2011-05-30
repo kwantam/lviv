@@ -148,20 +148,27 @@
 ; engineering notation
 (define (eng num)
   (let ((x (or (and (number? num) num) (string->number num))))
-    (if (not x)
-      (raise "type exception")
-      (let* ((xxpon (xpon x))
-             (x3pon (* 3 
-                       (- (quotient xxpon 3)
-                          (if (and
-                                (< xxpon 0)
-                                (not (zero? (remainder xxpon 3))))
-                            1 0))))
-             (xmant (/ x (expt 10 x3pon))))
-        (string-append (number->string 
-                         (exact->inexact (rnd xmant 12)))
-                       "e"
-                       (number->string x3pon))))))
+    (cond 
+      ((not x) (raise "type exception"))
+      ((and (not (real? x)) (complex? x))
+       (string-append 
+         (eng (real-part x))
+         (if (< (psign (imag-part x)) 0) "-" "+")
+         (eng (imag-part x))
+         "i"))
+      (else
+        (let* ((xxpon (xpon x))
+               (x3pon (* 3 
+                         (- (quotient xxpon 3)
+                            (if (and
+                                  (< xxpon 0)
+                                  (not (zero? (remainder xxpon 3))))
+                              1 0))))
+               (xmant (/ x (expt 10 x3pon))))
+          (string-append (number->string 
+                           (exact->inexact (rnd xmant 12)))
+                         "e"
+                         (number->string x3pon)))))))
 
 ; prettyprint for lviv elements
 (define (lviv-pp newline?)
