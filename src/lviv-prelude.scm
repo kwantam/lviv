@@ -138,29 +138,33 @@
 ; bernouilli numbers for estimating tanh
 ; ** sinh(x)/cosh(x) is sufficiently accurate
 ; ** so we'll just do that instead
-(define maxBN 101)
-(define n1toNBN (fromTo 1 maxBN))
-(define bnL (list (map (lambda (x) (/ 1 x)) n1toNBN)))
-(set-cdr! bnL (cons (cdar bnL) '()))
-(define (updateNthBN n bn)
-  (if (< (length bn) n) (raise "need predecessor")
-    (set-cdr! (iterateN cdr (- n 1) bn)
-              (cons (zipWith * n1toNBN (zipWith - (list-ref bn (- n 1))
-                                                (cdr (list-ref bn (- n 1)))))
-                    '()))))
-(map (lambda (x) (updateNthBN x bnL)) (cdr n1toNBN))
-(define bNums (reverse (map car (cdr (reverse bnL)))))
+; ** note: the following algorithm is basically a direct
+; implementation of the Akiyama-Tanigawa triangle from
+; http://www.cs.uwaterloo.ca/journals/JIS/VOL3/KANEKO/AT-kaneko.pdf
+;(define maxBN 101)
+;(define n1toNBN (fromTo 1 maxBN))
+;(define bnL (list (map (lambda (x) (/ 1 x)) n1toNBN)))
+;(set-cdr! bnL (cons (cdar bnL) '()))
+;(define (updateNthBN n bn)
+;  (if (< (length bn) n) (raise "need predecessor")
+;    (let ((bncdr (iterateN cdr (- n 1) bn)))
+;      (set-cdr! bncdr
+;                (cons (zipWith * n1toNBN 
+;                               (zipWith - (car bncdr) (cdar bncdr)))
+;                      '())))))
+;(map (lambda (x) (updateNthBN x bnL)) (cdr n1toNBN))
+;(define bNums (reverse (map car (cdr (reverse bnL)))))
 (define (everyOther ls)
   (if (or (null? ls) (null? (cdr ls)))
     '()
     (cons (car ls) (everyOther (cddr ls)))))
-(define tanhFacts
-  (zipWith
-    * (everyOther (cddr bNums))
-    (zipWith (lambda (x y) (* (- (expt 4 x) (expt 2 x))
-                              y))
-             (everyOther (cdr n1toNBN))
-             (everyOther (cdr invFacts)))))
+;(define tanhFacts
+;  (zipWith
+;    * (everyOther (cddr bNums))
+;    (zipWith (lambda (x y) (* (- (expt 4 x) (expt 2 x))
+;                              y))
+;             (everyOther (cdr n1toNBN))
+;             (everyOther (cdr invFacts)))))
 
 ; hyperbolic functions
 (define (sinh x)
@@ -286,6 +290,10 @@
   (cond ((zero? x) 0)
         ((and (real? x) (nan? x)) +nan.0)
         ((and (real? x) (infinite? x)) 0)
+        ((and (complex? x) 
+              (or (infinite? (imag-part x))
+                  (infinite? (real-part x))))
+         0)
         (else (inexact->exact (floor (/ (log (magnitude x)) ln10))))))
 (lviv-define-prim 'xpon 1)
 (define (mant x)
