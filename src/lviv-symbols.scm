@@ -58,6 +58,15 @@
            (and (eq? char (string-ref symb-str 0))
                 (> (string-length symb-str) 1))))))
 
+; like x-symbol?, but without
+; symbolicity check for faster
+; eval
+(define (x-symbol-unchecked? char)
+  (lambda (symb)
+    (let ((symb-str (symbol->string symb)))
+      (and (eq? char (string-ref symb-str 0))
+           (> (string-length symb-str) 1)))))
+
 ; meta-converter
 ; give it the sigil and an error msg
 ; it returns the conversion function
@@ -74,8 +83,17 @@
                  (elmRef elm 0))
          (= len (elmLen elm)))))
 
+; like x-symbol-elm? but without
+; the elm? check for faster apply
+(define (x-symbol-elm-unchecked? symTag len)
+  (lambda (elm)
+    (and (equal? symTag
+                 (elmRef elm 0))
+         (= len (elmLen elm)))))
+
 ; static symbol functions
 (define static-symbol? (x-symbol? #\&))
+(define static-symbol-unchecked? (x-symbol-unchecked? #\&))
 (define static-symbol->symbol x-symbol->symbol)
 (define staticLvivTag (mklvivtag '&))
 (define (mkStaticSymbolElm symb env)
@@ -90,6 +108,7 @@
 
 ; quote symbol functions
 (define quote-symbol? (x-symbol? #\*))
+(define quote-symbol-unchecked? (x-symbol-unchecked? #\*))
 (define (mkQuoteSymbolElm symb)
 ;  (if (illegal-symbol? symb) ; make sure it's legal
 ;    (eLeft "illegal symbol") ; oops
@@ -100,6 +119,7 @@
 
 ; is this symbol reversed?
 (define reverse-symbol? (x-symbol? #\:))
+(define reverse-symbol-unchecked? (x-symbol-unchecked? #\:))
 (define reverse-symbol->symbol x-symbol->symbol)
 
 ; is this an element that can be used to define an environment variable?
@@ -110,6 +130,7 @@
 (define stackopLvivTag (mklvivtag 'stackop))
 (define (mkStackOpElm op name) (mkElm stackopLvivTag op name))
 (define stackOpElm? (x-symbol-elm? stackopLvivTag 3))
+(define stackOpElm-unchecked? (x-symbol-elm-unchecked? stackopLvivTag 3))
 (define (stackOpElm->stackop elm) (elmRef elm 1))
 (define (stackOpElm-sym elm) (elmRef elm 2))
 
@@ -128,6 +149,7 @@
 (define (mkLambda code args env)
   (mkElm lambdaLvivTag args code env #f))
 (define lambda? (x-symbol-elm? lambdaLvivTag 5))
+(define lambda-unchecked? (x-symbol-elm-unchecked? lambdaLvivTag 5))
 ; reverse order of application
 (define (lambda-reverse binding)
   (let ((newElm (elmCopy binding)))
@@ -143,6 +165,7 @@
 (define (mkPrimBinding id arity)
   (mkElm primitiveLvivTag arity id #f))
 (define primitive? (x-symbol-elm? primitiveLvivTag 4))
+(define primitive-unchecked? (x-symbol-elm-unchecked? primitiveLvivTag 4))
 ; change a binding to its reverse
 (define (prim-reverse binding)
   (let ((newElm (elmCopy binding)))

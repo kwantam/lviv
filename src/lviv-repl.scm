@@ -118,41 +118,52 @@
                        (if (eLeft? lkRef)
                          (eLeft "lookup failed")
                          (fromLeftRight lkRef))))))
-    (cond ((static-symbol? item)                                  ; &foo -> (& foo env)
-           (mkStaticSymbolElm item (stGetEnv state)))
-          ((quote-symbol? item)                                   ; *bar -> bar
-           (mkQuoteSymbolElm item))
-          ((reverse-symbol? item)                                 ; :cons -> cons in reverse
-           (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
-                  (iBind (fromLeftRight iLBind)))
-             (cond ((eLeft? iLBind) iLBind)
-                   ((primitive? iBind) (prim-reverse iBind))
-                   ((lambda? iBind) (lambda-reverse iBind))
-                   (else (eLeft "can only reverse lambda or primitive")))))
-          ((static-symbol-elm? item) (lookupElm (static-symbol-env item)   ; static symbol
-                                                (static-symbol-sym item))) ; resolv in attached env
-          ((symbol? item)                                         ; a symbol
-           (if (member item stackOpListing)                       ; is it a stackOp?
-             (mkStackOpElm (carLookup item stackOpMapping) item)  ; yes
-             (let ((iLBind (stEnvLookupBinding state item)))      ; no, look it up in env
-               (if (eLeft? iLBind)                                ; did lookup succeed?
-                 item                                             ; no---make auto symbol
-                 (fromLeftRight iLBind)))))                       ; yes---pass it on
-          ((lviv-tagged? item) item)                              ; all other lviv-tagged items are idempotent
-          ((and (list? item) (pair? item))                        ; has to be list and not nil
-           (map (lambda (x) (lviv-eval state x)) item))           ; eval the contents
-          ((pair? item)                                           ; a pair gets car and cdr evaluated
+    (cond ((symbol? item)
+           (cond ((member item stackOpListing)            ; stackop?
+                  (mkStackOpElm                           ; make stackop element
+                    (carLookup item stackOpMapping)
+                    item))
+                 ((static-symbol-unchecked? item)                 ; &foo -> (& foo env)
+                  (mkStaticSymbolElm item (stGetEnv state)))
+                 ((quote-symbol-unchecked? item)                  ; *bar -> bar
+                  (mkQuoteSymbolElm item))
+                 ((reverse-symbol-unchecked? item)                ; :cons -> cons in reverse
+                  (let* ((iLBind (stEnvLookupBinding 
+                                   state 
+                                   (reverse-symbol->symbol item)))
+                         (iBind (fromLeftRight iLBind)))
+                    (cond ((eLeft? iLBind) iLBind)
+                          ((primitive? iBind) (prim-reverse iBind))
+                          ((lambda? iBind) (lambda-reverse iBind))
+                          (else (eLeft "can only reverse lambda or primitive")))))
+                 (else                                            ; otherwise
+                   (let ((iLBind (stEnvLookupBinding 
+                                   state item)))        ; look it up in env
+                     (if (eLeft? iLBind)                ; did lookup succeed?
+                       item                             ; no---make auto symbol
+                       (fromLeftRight iLBind))))))      ; yes---pass it on
+          ((static-symbol-elm? item)
+           (lookupElm (static-symbol-env item)       ; static symbol
+                      (static-symbol-sym item)))     ; resolve in attached env
+          ((lviv-tagged? item) item)                 ; all other lviv-tagged items are idempotent
+          ((and (list? item) (pair? item))                ; has to be list and not nil
+           (map (lambda (x) (lviv-eval state x)) item))   ; eval the contents
+          ((pair? item)                                   ; a pair gets car and cdr evaluated
            (cons (lviv-eval state (car item))
                  (lviv-eval state (cdr item))))
-          (else item))))                                          ; otherwise, I guess it's idempotent
+          (else item))))                                  ; otherwise, I guess it's idempotent
 
 ; apply the output from eval to the stack
 (define (lviv-apply state item)
   ((lambda (result) (if (eLeft? result) (stackError result) result))
    (cond ((eLeft? item) item)
-         ((stackOpElm? item) ((stackOpElm->stackop item) state))
-         ((primitive? item) (stPrimCall state item))
-         ((lambda? item) (stLambdaCall state item))
+         ((elm? item)
+          (cond ((stackOpElm-unchecked? item)
+                 ((stackOpElm->stackop item) state))
+                ((primitive-unchecked? item)
+                 (stPrimCall state item))
+                ((lambda-unchecked? item)
+                 (stLambdaCall state item))))
          (else (stStackPush state item))))) ; else just push it on the stack
 
 ; slurp in input by repeatedly reading until there's no more
