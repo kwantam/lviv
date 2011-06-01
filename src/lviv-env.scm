@@ -164,4 +164,8 @@
                   (rewind state (list fnId) (fromLeftRight res))
                   res)))))))
 
+; env prints out the environment
+(define (stEnv state)
+  (begin (lviv-ppenv (stGetEnv state))
+         (eRight '())))
 

@@ -44,10 +44,10 @@
                          (lambda-env binding)))))
          (fnCompResult                                      ; apply all but last piece of code
            (lambda ()
-             (eRight ((applyMap (force lambdaState))
-                      (car lambdaCodeParts)))))
+             (eRight (applyMap (force lambdaState) 
+                               (car lambdaCodeParts)))))
          (fnResult (delay (with-exception-catcher           ; catch errors in above
-                            (exceptionHandler #f)
+                            exceptionHandlerQuiet
                             fnCompResult)))
          (fnFinalEval                                       ; eval last piece in lambda env
            (delay (lviv-eval (force lambdaState) (cadr lambdaCodeParts)))))
@@ -80,7 +80,7 @@
              (eRight (apply (eval (primitive-id binding))
                             (rfunc (fromLeftRight (force fnArgs)))))))
          (fnResult (delay (with-exception-catcher 
-                            (exceptionHandler #f)
+                            exceptionHandlerQuiet
                             fnCompResult))))
     (cond ((eLeft? (force fnArgs)) (force fnArgs))
             ; if there aren't enough args, the procedure fails

@@ -55,8 +55,8 @@
   (lambda (symb)
     (and (symbol? symb) 
          (let ((symb-str (symbol->string symb)))
-           (and (> (string-length symb-str) 1) ; '& is not a legal static symbol
-                (eq? char (string-ref symb-str 0)))))))
+           (and (eq? char (string-ref symb-str 0))
+                (> (string-length symb-str) 1))))))
 
 ; meta-converter
 ; give it the sigil and an error msg
@@ -67,21 +67,22 @@
 
 ; meta-test for symbol-elementicity (that is, symbol in AST)
 ; give it symbol and length of representation
-(define (x-symbol-elm? sym len)
+(define (x-symbol-elm? symTag len)
   (lambda (elm)
     (and (elm? elm)
-         (= len (elmLen elm))
-         (equal? (mklvivtag sym)
-                 (elmRef elm 0)))))
+         (equal? symTag
+                 (elmRef elm 0))
+         (= len (elmLen elm)))))
 
 ; static symbol functions
 (define static-symbol? (x-symbol? #\&))
 (define static-symbol->symbol x-symbol->symbol)
+(define staticLvivTag (mklvivtag '&))
 (define (mkStaticSymbolElm symb env)
   (if (illegal-symbol? symb) ; make sure it's legal
     (eLeft "illegal symbol") ; oops
-    (mkElm (mklvivtag '&) (static-symbol->symbol symb) env)))
-(define static-symbol-elm? (x-symbol-elm? '& 3))
+    (mkElm staticLvivTag (static-symbol->symbol symb) env)))
+(define static-symbol-elm? (x-symbol-elm? staticLvivTag 3))
 (define (static-symbol-env elm) (elmRef elm 2))
 (define (static-symbol-sn  elm) (object->serial-number
                                   (static-symbol-env elm)))
@@ -106,24 +107,27 @@
                                (quote-symbol-elm? item)))
 
 ; stackops in AST
-(define (mkStackOpElm op name) (mkElm (mklvivtag 'stackop) op name))
-(define stackOpElm? (x-symbol-elm? 'stackop 3))
+(define stackopLvivTag (mklvivtag 'stackop))
+(define (mkStackOpElm op name) (mkElm stackopLvivTag op name))
+(define stackOpElm? (x-symbol-elm? stackopLvivTag 3))
 (define (stackOpElm->stackop elm) (elmRef elm 1))
 (define (stackOpElm-sym elm) (elmRef elm 2))
 
 ; thunks in AST
+(define thunkLvivTag (mklvivtag 'thunk))
 (define (mkThunkElm op)
-  (mkElm (mklvivtag 'thunk)
+  (mkElm thunkLvivTag
          (if (list? op)
            op
            (list op))))
-(define thunkElm? (x-symbol-elm? 'thunk 2))
+(define thunkElm? (x-symbol-elm? thunkLvivTag 2))
 (define (thunkElm->elm elm) (elmRef elm 1))
 
 ; make a lambda to stick in the env
+(define lambdaLvivTag (mklvivtag 'lambda))
 (define (mkLambda code args env)
-  (mkElm (mklvivtag 'lambda) args code env #f))
-(define lambda? (x-symbol-elm? 'lambda 5))
+  (mkElm lambdaLvivTag args code env #f))
+(define lambda? (x-symbol-elm? lambdaLvivTag 5))
 ; reverse order of application
 (define (lambda-reverse binding)
   (let ((newElm (elmCopy binding)))
@@ -135,9 +139,10 @@
 (define (lambda-reverse? elm) (elmRef elm 4))
 
 ; make a primitive binding to stick in the env
+(define primitiveLvivTag (mklvivtag 'primitive))
 (define (mkPrimBinding id arity)
-  (mkElm (mklvivtag 'primitive) arity id #f))
-(define primitive? (x-symbol-elm? 'primitive 4))
+  (mkElm primitiveLvivTag arity id #f))
+(define primitive? (x-symbol-elm? primitiveLvivTag 4))
 ; change a binding to its reverse
 (define (prim-reverse binding)
   (let ((newElm (elmCopy binding)))

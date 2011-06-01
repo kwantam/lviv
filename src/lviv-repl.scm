@@ -36,11 +36,10 @@
 
 ; eval->apply on a list
 ; this is used to evaluate keyboard input and for thunks
-(define (applyMap state)
-  (lambda (elm)
+(define (applyMap state elm)
   (map (lambda (x) 
          (lviv-apply state (lviv-eval state x)))
-       elm)))
+       elm))
 
 ; since lviv-apply always works on AST, stApply and lviv-apply are
 ; basically identical, but we have to wrap a safe pop around the
@@ -55,12 +54,62 @@
            (let* ((thunkCode (thunkElm->elm fnArg))       ; else perform tail call opt
                   (thunkCodeParts (splitAt (- (length thunkCode) 1)
                                            thunkCode)))
-             (begin ((applyMap state) (car thunkCodeParts)) ; call first part of thunk
+             (begin (applyMap state (car thunkCodeParts)) ; call first part of thunk
                     (lviv-apply                             ; then tail call last part
                       state
                       (lviv-eval state
                                  (cadr thunkCodeParts)))))))
           (else (lviv-apply state fnArg)))))    ; otherwise, just apply it like anything else
+
+; mapping of stackop to procedure
+(define stackOpMapping
+  (list `(depth . ,stStackDepth)
+        `(swap . ,stStackSwap)
+        `(drop . ,stStackDrop)
+        `(clear . ,stStackClear)
+        `(dropN . ,stStackDropN)
+        `(roll . ,stStackRollN)
+        `(unroll . ,stStackUnrollN)
+        `(dup . ,stStackDup)
+        `(dupN . ,stStackDupN)
+        `(over . ,stStackOver)
+        `(pick . ,stStackPickN)
+        `(swapIf . ,stStackSwapIf)
+        `(swapUnless . ,stStackSwapUnless)
+        `(dropIf . ,stStackDropIf)
+        `(dropUnless . ,stStackDropUnless)
+        `(uncons . ,stStackUncons)
+        `(define . ,stDefine)
+        `(undefLocal . ,(stUndef #t))
+        `(undef . ,(stUndef #f))
+        `(eval . ,stEval)
+        `(apply . ,stApply)
+        `(thunk . ,stStackThunk)
+        `(unthunk . ,stUnThunk)
+        `(lambda . ,stLambda)
+        `(unlambda . ,stUnLambda)
+        `(primitive . ,stPrimitive)
+        `(if . ,stIf)
+        `(unless . ,stUnless)
+        `(env . ,stEnv)
+        `(nop . ,stNop)
+        `(let . ,stLet)
+        `(tstk . ,stTStk)
+        `(untstk . ,(stUnTStk #f))
+        `(rtstk . ,(stUnTStk #t))
+        `(stk . ,stPrintStack)
+        ))
+
+; list of stackops; doing this now lets us not
+; call car for every lookup in the list above
+(define stackOpListing (map car stackOpMapping))
+
+; lookup item in association list
+(define (carLookup symb lst)
+  (if (eq? symb (caar lst))
+    (cdar lst)
+    (carLookup symb (cdr lst))))
+    
 
 ; the main eval procedure
 (define (lviv-eval state item)
@@ -69,32 +118,33 @@
                        (if (eLeft? lkRef)
                          (eLeft "lookup failed")
                          (fromLeftRight lkRef))))))
-    (cond ((static-symbol? item) ; &foo -> (& foo env)
+    (cond ((static-symbol? item)                                  ; &foo -> (& foo env)
            (mkStaticSymbolElm item (stGetEnv state)))
-          ((quote-symbol? item)  ; *bar -> bar
+          ((quote-symbol? item)                                   ; *bar -> bar
            (mkQuoteSymbolElm item))
-          ((reverse-symbol? item) ; :cons -> cons in reverse
+          ((reverse-symbol? item)                                 ; :cons -> cons in reverse
            (let* ((iLBind (stEnvLookupBinding state (reverse-symbol->symbol item)))
                   (iBind (fromLeftRight iLBind)))
              (cond ((eLeft? iLBind) iLBind)
                    ((primitive? iBind) (prim-reverse iBind))
                    ((lambda? iBind) (lambda-reverse iBind))
                    (else (eLeft "can only reverse lambda or primitive")))))
-          ((static-symbol-elm? item) (lookupElm (static-symbol-env item)
-                                                (static-symbol-sym item)))
-          ((stStackOp? item) (mkStackOpElm (stStackOp? item) item)) ; stackOp
-          ((symbol? item)        ; look up symbol in present env
-           (let ((iLBind (stEnvLookupBinding state item)))
-             (if (eLeft? iLBind) ; did lookup succeed?
-               item ; no---make auto symbol
-               (fromLeftRight iLBind)))) ; yes---pass it on
-          ((lviv-tagged? item) item) ; all other lviv-tagged items are idempotent
-          ((and (list? item) (pair? item)) ; has to be list and not nil
-           (map (lambda (x) (lviv-eval state x)) item))
-          ((pair? item) ; a pair gets car and cdr evaluated
+          ((static-symbol-elm? item) (lookupElm (static-symbol-env item)   ; static symbol
+                                                (static-symbol-sym item))) ; resolv in attached env
+          ((symbol? item)                                         ; a symbol
+           (if (member item stackOpListing)                       ; is it a stackOp?
+             (mkStackOpElm (carLookup item stackOpMapping) item)  ; yes
+             (let ((iLBind (stEnvLookupBinding state item)))      ; no, look it up in env
+               (if (eLeft? iLBind)                                ; did lookup succeed?
+                 item                                             ; no---make auto symbol
+                 (fromLeftRight iLBind)))))                       ; yes---pass it on
+          ((lviv-tagged? item) item)                              ; all other lviv-tagged items are idempotent
+          ((and (list? item) (pair? item))                        ; has to be list and not nil
+           (map (lambda (x) (lviv-eval state x)) item))           ; eval the contents
+          ((pair? item)                                           ; a pair gets car and cdr evaluated
            (cons (lviv-eval state (car item))
                  (lviv-eval state (cdr item))))
-          (else item)))) ; otherwise, I guess it's idempotent
+          (else item))))                                          ; otherwise, I guess it's idempotent
 
 ; apply the output from eval to the stack
 (define (lviv-apply state item)
@@ -123,8 +173,8 @@
         (else
           (if input
             (let ((allInput (cons input (read-list))))
-              (with-exception-catcher (exceptionHandler #t)
-                                      (lambda () ((applyMap state) allInput)))))
+              (with-exception-catcher exceptionHandlerPrint
+                                      (lambda () (applyMap state allInput)))))
           (stPrintStack state)
           (display "> ")
           (lviv-repl state (read)))))
@@ -132,14 +182,14 @@
 ; read in a file as if entered at the repl
 (define (lviv-file state file)
   (let* ((fInput (with-exception-catcher
-                   (exceptionHandler #f)
+                   exceptionHandlerQuiet
                    (lambda () (open-input-file file))))
          (fRead (delay (read-all fInput))))
     (if (eLeft? fInput)
       fInput
       (begin (with-exception-catcher
-               (exceptionHandler #t)
-               (lambda () ((applyMap state) (force fRead))))
+               exceptionHandlerPrint
+               (lambda () (applyMap state (force fRead))))
              (stPrintStack state)))))
 
 ; default stack display depth

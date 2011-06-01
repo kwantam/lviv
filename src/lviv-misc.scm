@@ -178,8 +178,8 @@
 
 ; eLeft and eRight are like the Either monad
 ; eRight signals success, eLeft signals failure
-(define (eLeft msg) (if (eLeft? msg) msg (cons '(either #f) msg)))
-(define (eRight msg) (if (eRight? msg) msg (cons '(either #t) msg)))
+(define (eLeft msg) (cons '(either #f) msg))
+(define (eRight msg) (cons '(either #t) msg))
 (define (eRight? either) (and (pair? either) (equal? '(either #t) (car either))))
 (define (eLeft? either) (and (pair? either) (equal? '(either #f) (car either))))
 (define fromLeftRight cdr)

@@ -26,6 +26,7 @@
 (include "lviv-state.scm")
 (include "lviv-stack.scm")
 (include "lviv-env.scm")
+(include "lviv-specforms.scm")
 (include "lviv-exceptions.scm")
 (include "lviv-symbols.scm")
 (include "lviv-funcalls.scm")
@@ -66,5 +67,5 @@
           (lviv-process-args (cdr c--line)))))
 
 ; print the stack before we exit
-(define (main . foo)
+(define (main . _)
   (stPrintStack lvivState))

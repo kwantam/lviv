@@ -125,4 +125,6 @@
         (else
           (dispErr "unknown exception"))))))
 
+(define exceptionHandlerPrint (exceptionHandler #t))
+(define exceptionHandlerQuiet (exceptionHandler #f))
 

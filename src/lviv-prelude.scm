@@ -31,11 +31,11 @@
 
 (define (lviv-define-prim x arity . name)
   (if (null? name)
-    ((applyMap lvivState) (quasiquote (,arity ,x primitive ,x define)))
+    (applyMap lvivState (quasiquote (,arity ,x primitive ,x define)))
     (let ((cName (car name)))
-      ((applyMap lvivState) (quasiquote (,arity ,x primitive ,cName define))))))
+      (applyMap lvivState (quasiquote (,arity ,x primitive ,cName define))))))
 (define (lviv-define-val x val)
-  ((applyMap lvivState) (quasiquote (,val ,x define))))
+  (applyMap lvivState (quasiquote (,val ,x define))))
 
 ; constants
 (define pi 3.141592653589793238462643) ; more than we can actually represent
