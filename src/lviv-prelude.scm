@@ -126,7 +126,7 @@
 (define (asec x)
   (if (= 0 x) +inf.0i (acos (/ 1 x)))) (lviv-define-prim 'asec 1)
 (define (acsc x)
-  (if (= 0 x) +inf.0i (asin (/ 1 x)))) (lviv-define-prim 'acsc 1)
+  (if (= 0 x) (- pi/2 +inf.0i) (asin (/ 1 x)))) (lviv-define-prim 'acsc 1)
 (define (acot x)
   (if (= 0 x) pi/2 (atan (/ 1 x)))) (lviv-define-prim 'acot 1)
 (define (d>r x) (* pi (/ x 180))) (lviv-define-prim 'd>r 1)
