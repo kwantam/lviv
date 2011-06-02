@@ -61,6 +61,18 @@ We define two functions, showA and incA, that show and increment the value of an
 
 Note how here we quote `*&n` to delay its binding until it is evaluated in the environment of the outermost lambda.
 
+## Building and running lviv
+
+The Makefile that comes with lviv should do almost everything you need.
+
+If you just want to run lviv, `make run` will run lviv with gsi. You can pass arguments by overriding the `ARGS` variable in your make invocation (e.g., `make ARGS="foo.lviv" run`), or you can just run gsi directly yourself. `make runtest` will run the test files in the examples directory using gsi.
+
+The `lviv` target builds a self-contained lviv executable. `test` takes this executable and runs the tests from the examples directory. The default target, `all`, is equivalent to `make lviv test`.
+
+The `debug` target invokes gsi with the lviv source files, but does not start the REPL. This lets you examine the behavior of the interpreter directly.
+
+Finally, there are the profiling targets, `prof` and `profrun`, which build the executable with profiling enabled and run this profiling executable on some dummy code, respectively.
+
 ## Basics
 
 If you've used an HP calculator, you're probably familiar with how RPN works. Expressions are entered by pushing entries onto a stack and applying operators to the stack. Operators pop a defined number of operands off the stack, perform a computation, and push the result back onto the stack. For example,
@@ -483,4 +495,26 @@ The first example above illustrates that only one of the consequent or alternati
 `tstk` calls can be nested; each `untstk` or `rtstk` ascends one level of nesting.
 
 ### exception handling *NOT YET IMPLEMENTED*
+
+## License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+ 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Copyright (c) 2011 Riad S. Wahby <rsw@jfet.org> <kwantam@gmail.com>
 
