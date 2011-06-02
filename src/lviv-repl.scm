@@ -158,12 +158,14 @@
   ((lambda (result) (if (eLeft? result) (stackError result) result))
    (cond ((eLeft? item) item)
          ((elm? item)
-          (cond ((stackOpElm-unchecked? item)
+          (cond ((stackOpElm-unchecked? item)           ; stackop gets executed
                  ((stackOpElm->stackop item) state))
-                ((primitive-unchecked? item)
+                ((primitive-unchecked? item)            ; primitive gets called
                  (stPrimCall state item))
-                ((lambda-unchecked? item)
-                 (stLambdaCall state item))))
+                ((lambda-unchecked? item)               ; lambda gets called
+                 (stLambdaCall state item))
+                (else                                   ; other elms are idempotent
+                  (stStackPush state item))))
          (else (stStackPush state item))))) ; else just push it on the stack
 
 ; slurp in input by repeatedly reading until there's no more

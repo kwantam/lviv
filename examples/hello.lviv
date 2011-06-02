@@ -1,25 +1,25 @@
 (*x dup *) (*x) lambda *square define
 5 square
 ; expect 25 here
-pstk clear
+stk clear
 
 ((1) (*x dup 1 - *fact *) *x 0 eq? if) (*x) lambda *fact define
 5 fact
 ; expect 120 here
-pstk clear
+stk clear
 
 ((swap drop) (dup 3 roll + *x 1 - *fibHlp) *x 0 eq? if) (*x) lambda *fibHlp define
 ((0) (0 1 *x 1 - *fibHlp) *x 1 < if) (*x) lambda *fib define
 25 fib
 ; expect 75025
-pstk clear
+stk clear
 
 ( ((swap drop) (dup 3 roll + **x 1 - **fibHlp) **x 0 eq? if) (**x) lambda
   **fibHlp define (0) (0 1 *x 1 - **fibHlp) *x 1 < if ) (*x) lambda
 *fib define
 25 fib
 ; expect 75025
-pstk clear
+stk clear
 *fibHlp undef
 
 ( (**n) () lambda (1 **n + **nref define) () lambda 
@@ -27,14 +27,14 @@ pstk clear
 *incA define *readA define
 readA
 ; expect 1
-pstk clear
+stk clear
 incA incA incA incA incA readA
 ; expect 6
-pstk clear
+stk clear
 
 0 *newline primitive apply drop
 "Should have printed out 25 120 75025 75025 1 6"
-pstk clear
+stk clear
 0 *newline primitive apply drop
 ; this program should output
 ; 25
