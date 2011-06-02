@@ -69,7 +69,7 @@ If you just want to run lviv, `make run` will run lviv with gsi. You can pass ar
 
 The `lviv` target builds a self-contained lviv executable. `test` takes this executable and runs the tests from the examples directory. The default target, `all`, is equivalent to `make lviv test`.
 
-The `debug` target invokes gsi with the lviv source files, but does not start the REPL. This lets you examine the behavior of the interpreter directly.
+The `debug` target invokes gsi with the lviv source files, but leaves you at the Scheme REPL rather than invoking the lviv REPL. This lets you examine the behavior of the interpreter directly.
 
 Finally, there are the profiling targets, `prof` and `profrun`, which build the executable with profiling enabled and run this profiling executable on some dummy code, respectively.
 
