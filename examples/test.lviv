@@ -1,0 +1,212 @@
+; first, let's define some testing primitives
+(*x) 1 *display primitive (drop) cons append
+0 *newline primitive (drop) cons append
+(*x) lambda *displayLn define
+; defines a lambda, displayLn, that displays the 1st argument and outputs newline
+
+1 *raise primitive *raise define
+; raise an error
+
+( (clear "success")
+  (*errMsg displayLn "assert error" raise)
+  *target *value equal? if )
+(*value *target *errMsg) lambda *assert define
+; assert that the 0th entry on the stack ought to be some particular value
+
+; square
+(*x dup *) (*x) lambda *square define
+5 square
+25 "expected 25 in 5 square" assert
+stk clear
+
+; factorial
+((1) (*x dup 1 - *fact *) *x 0 eq? if) (*x) lambda *fact define
+5 fact
+120 "expected 120 in 5 fact" assert
+stk clear
+
+; fibonacci
+((swap drop) (dup 3 roll + *x 1 - *fibHlp) *x 0 eq? if) (*x) lambda *fibHlp define
+((0) (0 1 *x 1 - *fibHlp) *x 1 < if) (*x) lambda *fib define
+5 fib
+5 "expected 5 in 5 fib" assert
+stk clear
+
+15 fib
+610 "expected 610 in 15 fib" assert
+stk clear
+
+25 fib
+75025 "expected 75025 in 25 fib" assert
+stk clear
+
+; another fibonacci
+( ((swap drop) (dup 3 roll + **x 1 - **fibHlp) **x 0 eq? if) (**x) lambda
+  **fibHlp define (0) (0 1 *x 1 - **fibHlp) *x 1 < if ) (*x) lambda
+*fib2 define
+35 fib2
+9227465 "expected 9227465 in 35 fib2" assert
+stk clear
+
+; accumulator
+( (**n) () lambda (1 **n + **nref define) () lambda 
+  *&n **nref define 1 *n define ) () lambda apply
+*incA define *readA define
+readA
+1 "expected 1 in first readA" assert
+stk clear
+
+incA incA incA readA
+4 "expected 4 in second readA" assert
+stk clear
+
+incA incA incA readA
+7 "expected 7 in third readA" assert
+stk clear
+
+; basic arithmetic
+1 2 + 2 * 6 * sqrt
+6 "expected 6 in sqrt" assert
+stk clear
+
+; stack operations
+1 3 2 2
+dropN
+1 "expected 1 after dropN" assert
+stk clear
+
+; more stack operations
+1 2 3 4 5 6
+3 roll
+unroll
+5 "expected 5 after roll-unroll" assert
+stk clear
+
+; list operations
+nil
+1 :cons
+2 :cons
+(3 4) append
+(2 1 3 4) "expected (2 1 3 4) after list ops" assert
+stk clear
+
+; more list operations
+(2 1 3 4)
+uncons
+:cons
+cdr
+car
+1 "expected 1 after uncons cons cdr car" assert
+stk clear
+
+; define, thunk
+1 *z define
+2 z
+-
+(&z +) cons thunk
+2 *z define
+apply
+(*z &z +) (*z) lambda apply
+5 "expected 5 after define-thunk" assert
+stk clear
+
+; eval stuff
+1 eval
+*a define
+*a
+eval
+(*a 2) cons
+4 *a define
+eval
+(1 4 2) "expected (1 4 2) after define-eval" assert
+stk clear
+
+; eval and apply
+(1 4 2)
+1 apply
+*:cons
+apply
+eval
+apply
+(1 1 4 2) "expected (1 1 4 2) after eval-apply" assert
+stk clear
+
+; thunks
+(1 *z +) thunk
+eval
+dup 2 *z define apply
+15 + *z define apply
+19 "expected 19 after thunking around" assert
+stk clear
+
+; thunks and unthunks
+(1 2 +) thunk
+dup apply
+swap unthunk (3 *) append thunk
+apply *
+27 "expected 27 after thunk-unthunk" assert
+stk clear
+
+; primitives
+2 *expt primitive
+2 3 3 roll
+apply
+2 *expt primitive *expt define 2 expt
+64 "expected 64 after expt" assert
+stk clear
+
+; simple lambdas
+*x
+(1 +) cons
+(*y *) append
+(*x *y) lambda *xyfunc define
+2 1
+xyfunc
+2 *xyfunc eval
+apply
+8 "expected 8 after simple lambda stuff" assert
+stk clear
+
+; another thunk
+(swap 1 + swap *) thunk
+2 1 3 roll
+apply
+3 "expected 3 after lambda-equiv thunk" assert
+stk clear
+
+; lambda-unlambda manipulations
+(1 *a +) (*a) lambda dup
+3 swap apply
+swap unlambda
+(*b) append swap
+(*b *) append swap lambda
+5 swap apply
+25 "expected 25 after lambda-unlambda" assert
+stk clear
+
+; let
+2 *a define
+(&a *a *b + *) ( (*a . 1) (*b . (*a &a +)) ) let
+6 *z define
+(*z +) cons
+(*a *) append ( (*a . 1) ) let
+14 "expected 14 after some let tricks" assert
+stk clear
+
+; conditionals
+1 (nop) (0 /) #t if
+(3 -) (3 +) #f if
+(3 -) (3 +) #t swapUnless drop thunk apply
+((2) (1) #t if) (0) #t if +
+3 "expected 3 after if examples" assert
+stk clear
+
+; tstk, untstk, rtstk
+1 2 3 4 5 tstk depth
+0 "expected 0 depth after tstk" assert
+untstk depth 5 "expected 5 depth after untstk" assert
+tstk 6 rtstk 6 "expected 6 after rtstk" assert
+stk clear
+
+; all done
+"if you made it this far, all tests completed successfully" displayLn
