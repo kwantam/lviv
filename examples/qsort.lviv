@@ -5,10 +5,10 @@
 ; given a predicate in slot 0 and a list in slot 1
 ; filter the list into two lists, one for which the
 ; predicate is true and one for which it is false
-( (*tList *fList)                          ; if the list is null, just return the true and false lists
-  (*lList uncons (*tList cons *fList)      ; otherwise, take the first element off the list, cons it to
-                (*fList cons *tList swap)  ; tlist or flist as appropriate
-                3 pick *pred apply if      ; (test whether to cons to tList or fList)
+( (*tList *fList)                          ; if the list is null, return the true and false lists
+  (*lList uncons (*tList cons *fList)      ; otherwise, take the first element, cons it to tlist
+                 (*fList cons *tList swap) ; or flist as appropriate
+                 3 pick *pred apply if     ; (test whether to cons to tList or fList)
    3 roll ***pred eval *filt2Hlp)          ; then get the stack back in order and call again
   *lList null? if )                        ; (test whether list is null)
 (*tList *fList *lList *pred) lambda *filt2Hlp define
@@ -19,10 +19,10 @@
 ; qsort: use the first element of the list as the pivot
 ; filter the list and qsort the resulting lists
 ( (*lList)                             ; if it's 0 or 1 elm long, just return it
-  (*lList uncons dup 3 unroll          ; otherwise, uncons it to get the next pivot, and save off the pivot
-   (***n <) cons (***n) lambda filt2   ; filter the list based on the pivot into greater and lesser lists
-   **qsort eval apply swap             ; sort the first part
-   **qsort eval apply 3 roll :cons     ; sort the second part, then add the pivot onto the beginning
+  (*lList uncons dup 3 unroll          ; otherwise, get the next pivot, save off the pivot
+   (***n <) cons (***n) lambda filt2   ; filter the list into greater and lesser lists
+   *qsort swap                         ; sort the first part
+   *qsort 3 roll :cons                 ; sort the second part, then replace the pivot
    append                              ; append them, and we're sorted
   )
   (#t) (*lList cdr null?) *lList null? if if )

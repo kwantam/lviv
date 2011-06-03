@@ -326,6 +326,7 @@
 (lviv-define-prim 'append 2)
 (lviv-define-prim 'cons 2)
 (lviv-define-prim 'null? 1)
+(lviv-define-prim 'reverse 1)
 
 (define (add-cxrs state n)
   (letrec ((nums (take n '(1 2 4 8 16)))
