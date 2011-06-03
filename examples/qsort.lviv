@@ -18,7 +18,7 @@
 ; filter the list and qsort the resulting lists
 ( (*lList)                             ; if it's 0 or 1 elm long, just return it
   (*lList uncons dup 3 unroll          ; otherwise, uncons it to get the next pivot, and save off the pivot
-   (***n <) cons (***n) lambda filt2  ; filter the list based on the pivot into greater and lesser lists
+   (***n <) cons (***n) lambda filt2   ; filter the list based on the pivot into greater and lesser lists
    **qsort eval apply swap             ; sort the first part
    **qsort eval apply 3 roll :cons     ; sort the second part, then add the pivot onto the beginning
    append                              ; append them, and we're sorted
