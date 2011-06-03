@@ -37,9 +37,11 @@
 ; illegal symbol is used to check static and quote symbols
 ; for legality. In particular, we care that the second character
 ; of the symbol isn't something illegal
-(define illegal-chars (list #\. #\+ #\- #\& #\* #\!))
+(define illegal-chars (list #\& #\* #\. #\+ #\-))
 (define (illegal-symbol? symb)
   (member (string-ref (symbol->string symb) 1) illegal-chars))
+(define (illegal-quote-symbol? symb)
+  (member (string-ref (symbol->string symb) 1) (cddr illegal-chars)))
 
 (define elm? vector?)
 (define mkElm vector)
@@ -110,10 +112,8 @@
 (define quote-symbol? (x-symbol? #\*))
 (define quote-symbol-unchecked? (x-symbol-unchecked? #\*))
 (define (mkQuoteSymbolElm symb)
-;  (if (illegal-symbol? symb) ; make sure it's legal
-;    (eLeft "illegal symbol") ; oops
-;***I think quotes should be OK as long as they parse
-    (quote-symbol->symbol symb));)
+  (or (and (symbol? symb) (quote-symbol->symbol symb)) ; make sure it's legal
+      (eLeft "illegal quote symbol")))                 ; otherwise error
 (define quote-symbol->symbol x-symbol->symbol)
 (define quote-symbol-elm? symbol?)
 

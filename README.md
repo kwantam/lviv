@@ -50,7 +50,7 @@ Note that the `x` in the scope of the inner lambda needs to be double-quoted (`*
 We define two functions, showA and incA, that show and increment the value of an accumulator, respectively. Note that both functions close over a private environment.
 
     > ( (**n) () lambda (1 **n + **nref define) () lambda 
-        *&n **nref define 1 *n define ) () lambda apply
+        *&n **nref define 1 **n define ) () lambda apply
       *incA define *readA define
     > readA
     1

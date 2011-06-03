@@ -37,7 +37,15 @@
   (raise (list 'stackError (fromLeftRight result))))
 
 (define (stackError? exc)
-  (and (list? exc) (eq? (car exc) 'stackError) (= (length exc) 2)))
+  (and (list? exc) 
+       (= (length exc) 2)
+       (eq? (car exc) 'stackError)
+       (string? (cadr exc))))
+
+(define (symbErr symb err)
+  (raise (string-append (symbol->string symb)
+                        ": "
+                        err)))
 
 (define (dispErr_ msg)
   (let ((errMsg (string-append "--> error: " msg "\n")))
@@ -122,6 +130,8 @@
                                    "error exception raised"))))
         ((divide-by-zero-exception? exc)
          (dispErr "divide by zero"))
+        ((string? exc)
+         (dispErr exc))
         (else
           (dispErr "unknown exception"))))))
 

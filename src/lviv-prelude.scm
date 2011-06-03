@@ -29,13 +29,18 @@
 
 (define lvivState (mkEmptyState))
 
-(define (lviv-define-prim x arity . name)
-  (if (null? name)
-    (applyMap lvivState (quasiquote (,arity ,x primitive ,x define)))
-    (let ((cName (car name)))
-      (applyMap lvivState (quasiquote (,arity ,x primitive ,cName define))))))
-(define (lviv-define-val x val)
-  (applyMap lvivState (quasiquote (,val ,x define))))
+(define (symbol->quote-symbol symb)
+  (string->symbol (string-append "*" (symbol->string symb))))
+
+(define (lviv-define-prim symb arity . name)
+  (let ((qsymb (symbol->quote-symbol symb)))
+    (if (null? name)
+      (applyMap lvivState (quasiquote (,arity ,qsymb primitive ,qsymb define)))
+      (let ((cName (symbol->quote-symbol (car name))))
+        (applyMap lvivState (quasiquote (,arity ,qsymb primitive ,cName define)))))))
+
+(define (lviv-define-val symb val)
+  (applyMap lvivState (quasiquote (,val ,(symbol->quote-symbol symb) define))))
 
 ; constants
 (define pi 3.141592653589793238462643) ; more than we can actually represent
@@ -131,7 +136,7 @@
   (if (= 0 x) pi/2 (atan (/ 1 x)))) (lviv-define-prim 'acot 1)
 (define (d>r x) (* pi (/ x 180))) (lviv-define-prim 'd>r 1)
 (define (r>d x) (* 180 (/ x pi))) (lviv-define-prim 'r>d 1)
-(lviv-define-prim '*atan 2 'atan2)
+(lviv-define-prim 'atan 2 'atan2)
 (define (vers x) (- 1 (cos x))) (lviv-define-prim 'vers 1)
 (define (hav x) (/ (vers x) 2)) (lviv-define-prim 'hav 1)
 
@@ -344,4 +349,3 @@
 (add-cxrs lvivState 3)
 (add-cxrs lvivState 2)
 (add-cxrs lvivState 1)
-

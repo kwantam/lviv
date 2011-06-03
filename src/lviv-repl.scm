@@ -116,7 +116,7 @@
   (let ((lookupElm (lambda (env name)
                      (let ((lkRef (envLookupBinding env name)))
                        (if (eLeft? lkRef)
-                         (eLeft "lookup failed")
+                         (symbErr name "lookup failed")
                          (fromLeftRight lkRef))))))
     (cond ((symbol? item)
            (cond ((member item stackOpListing)            ; stackop?
@@ -128,20 +128,16 @@
                  ((quote-symbol-unchecked? item)                  ; *bar -> bar
                   (mkQuoteSymbolElm item))
                  ((reverse-symbol-unchecked? item)                ; :cons -> cons in reverse
-                  (let* ((iLBind (stEnvLookupBinding 
-                                   state 
-                                   (reverse-symbol->symbol item)))
-                         (iBind (fromLeftRight iLBind)))
-                    (cond ((eLeft? iLBind) iLBind)
-                          ((primitive? iBind) (prim-reverse iBind))
-                          ((lambda? iBind) (lambda-reverse iBind))
-                          (else (eLeft "can only reverse lambda or primitive")))))
+                  (let ((iBind (lookupElm (stGetEnv state)
+                                          (reverse-symbol->symbol item)))) ; look it up
+                    (cond ((primitive? iBind) (prim-reverse iBind))        ; reverse if possible
+                          ((lambda? iBind) (lambda-reverse iBind))         ; "
+                          (else                                            ; otherwise, error
+                            (symbErr (reverse-symbol->symbol item)
+                                     "can only reverse lambda or primitive")))))
                  (else                                            ; otherwise
-                   (let ((iLBind (stEnvLookupBinding 
-                                   state item)))        ; look it up in env
-                     (if (eLeft? iLBind)                ; did lookup succeed?
-                       item                             ; no---make auto symbol
-                       (fromLeftRight iLBind))))))      ; yes---pass it on
+                   (lookupElm (stGetEnv state)
+                              item))))
           ((static-symbol-elm? item)
            (lookupElm (static-symbol-env item)       ; static symbol
                       (static-symbol-sym item)))     ; resolve in attached env

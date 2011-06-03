@@ -23,7 +23,7 @@ stk clear
 *fibHlp undef
 
 ( (**n) () lambda (1 **n + **nref define) () lambda 
-  *&n **nref define 1 *n define ) () lambda apply
+  *&n **nref define 1 **n define ) () lambda apply
 *incA define *readA define
 readA
 ; expect 1
