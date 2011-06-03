@@ -1,0 +1,42 @@
+
+; filter2
+; given a predicate in slot 0 and a list in slot 1
+; filter the list into two lists, one for which the
+; predicate is true and one for which it is false
+( (*tList *fList)
+  (*lList uncons (*tList cons *fList) 
+                (*fList cons *tList swap) 
+                3 pick *pred apply if
+   3 roll ***pred eval *filt2Hlp)
+  *lList null? if )
+(*tList *fList *lList *pred) lambda *filt2Hlp define
+
+( () () *lList **pred eval *filt2Hlp )
+(*lList *pred) lambda *filt2 define
+
+; qsort: use the first element of the list as the pivot
+; filter the list and qsort the resulting lists
+( (*lList)                             ; if it's 0 or 1 elm long, just return it
+  (*lList uncons dup 3 unroll          ; otherwise, uncons it to get the next pivot, and save off the pivot
+   (***n <) cons (***n) lambda filt2  ; filter the list based on the pivot into greater and lesser lists
+   **qsort eval apply swap             ; sort the first part
+   **qsort eval apply 3 roll :cons     ; sort the second part, then add the pivot onto the beginning
+   append                              ; append them, and we're sorted
+  )
+  (#t) (*lList cdr null?) *lList null? if if )
+(*lList) lambda *qsort define
+
+; some digits of pi grouped into twos for testing the sorting
+( 31 37 83 87 52 88 65 87 53 32 08 38 14 20 61 71 77 66 91 47 30 35 98 25 34
+  90 42 87 55 46 87 31 15 95 62 86 38 82 35 37 87 59 37 51 95 77 81 85 77 80
+  53 21 71 22 68 06 61 30 01 92 78 76 61 11 95 90 92 16 42 01 98 93 80 95 25
+  72 01 31 37 83 87 52 88 65 87 53 32 08 38 14 20 61 71 77 66 91 47 30 35 98
+  25 34 90 42 87 55 46 87 31 15 95 62 86 38 82 35 37 87 59 37 51 95 77 81 85
+  77 80 53 21 71 22 68 06 61 30 01 92 78 76 61 11 95 90 92 16 42 01 98 93 80
+  95 25 72 01 14 15 92 65 35 89 79 32 38 46 26 43 38 32 79 50 28 84 19 71 69
+  39 93 75 10 58 20 97 49 44 59 23 07 81 64 06 28 62 08 99 86 28 03 48 25 34
+  21 17 06 79 82 14 80 86 51 32 82 30 66 47 09 38 44 60 95 50 58 22 31 72 53
+  59 40 81 28 48 1 ) *testList define
+
+*testList qsort
+
