@@ -1,17 +1,19 @@
+; qsort.lviv
+; quicksort implemented in lviv
 
 ; filter2
 ; given a predicate in slot 0 and a list in slot 1
 ; filter the list into two lists, one for which the
 ; predicate is true and one for which it is false
-( (*tList *fList)
-  (*lList uncons (*tList cons *fList) 
-                (*fList cons *tList swap) 
-                3 pick *pred apply if
-   3 roll ***pred eval *filt2Hlp)
-  *lList null? if )
+( (*tList *fList)                          ; if the list is null, just return the true and false lists
+  (*lList uncons (*tList cons *fList)      ; otherwise, take the first element off the list, cons it to
+                (*fList cons *tList swap)  ; tlist or flist as appropriate
+                3 pick *pred apply if      ; (test whether to cons to tList or fList)
+   3 roll ***pred eval *filt2Hlp)          ; then get the stack back in order and call again
+  *lList null? if )                        ; (test whether list is null)
 (*tList *fList *lList *pred) lambda *filt2Hlp define
 
-( () () *lList **pred eval *filt2Hlp )
+( () () *lList **pred eval *filt2Hlp )     ; call the helper function with empty tList and fList
 (*lList *pred) lambda *filt2 define
 
 ; qsort: use the first element of the list as the pivot
