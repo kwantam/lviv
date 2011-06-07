@@ -202,7 +202,15 @@
 ;                      (tanhHlp (cdr ks) (cddr xps)))))))
 ;      (+ x (tanhHlp (cdr tanhFacts) (cddr n1toN))))
 ;    (let ((exp2x (exp (* 2 x)))) (/ (- exp2x 1) (+ exp2x 1)))))
-(define (tanh x) (/ (sinh x) (cosh x)))
+
+; this is for the case where sinh(x) and cosh(x) blow up to +inf.0
+; we know that in this case they blow up in such a way that the
+; correct answer is just 1
+(define (tanh x) 
+  (let ((sinhx (sinh x))
+        (coshx (cosh x)))
+    (if (= sinhx coshx) 1
+        (/ sinhx coshx))))
 (lviv-define-prim 'tanh 1)
 
 (define acoshTArgs
@@ -296,8 +304,12 @@
         ((and (real? x) (nan? x)) +nan.0)
         ((and (real? x) (infinite? x)) 0)
         ((and (complex? x) 
-              (or (infinite? (imag-part x))
-                  (infinite? (real-part x))))
+              (let ((imagx (imag-part x))
+                    (realx (real-part x)))
+                (or (infinite? imagx)
+                    (nan? imagx)
+                    (infinite? realx)
+                    (nan? realx))))
          0)
         (else (inexact->exact (floor (/ (log (magnitude x)) ln10))))))
 (lviv-define-prim 'xpon 1)
