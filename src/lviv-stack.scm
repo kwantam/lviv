@@ -197,6 +197,13 @@
 (define (stTStk state)
   (eRight (stUpdateStackBox state (cons '() (stGetStackBox state)))))
 
+; make temp stack with copy of present stack's contents
+(define (stDTStk state)
+  (let ((pStackBox (stGetStackBox state)))
+    (eRight (stUpdateStackBox state 
+                              (cons (list-copy (car pStackBox)) 
+                                    pStackBox)))))
+
 ; undo temp stack, optionally returning last value
 (define (stUnTStk return?)
   (lambda (state)

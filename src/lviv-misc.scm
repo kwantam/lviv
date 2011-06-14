@@ -47,6 +47,12 @@
     (let ((ninit (f init (car ls))))
       (cons ninit (scanl f ninit (cdr ls))))))
 
+; list-copy
+(define (list-copy ls)
+  (if (null? ls) 
+    '()
+    (cons (car ls) (list-copy (cdr ls)))))
+
 ; zipWith
 ; like the Haskell function
 ; zipWith func l1 l2

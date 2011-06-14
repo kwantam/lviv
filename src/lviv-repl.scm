@@ -95,6 +95,7 @@
         `(nop . ,stNop)
         `(let . ,stLet)
         `(tstk . ,stTStk)
+        `(dtstk . ,stDTStk)
         `(untstk . ,(stUnTStk #f))
         `(rtstk . ,(stUnTStk #t))
         `(stk . ,stPrintStack)

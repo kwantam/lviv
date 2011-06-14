@@ -488,11 +488,24 @@ The first example above illustrates that only one of the consequent or alternati
 
 ## Other operations
 
-### `tstk`, `untstk`, and `rtstk`
+### `tstk`, `dtstk`, `untstk`, and `rtstk`
 
 `tstk` moves aside the present stack and replaces it with an empty temporary stack. `untstk` removes the temporary stack and restores the previous one. `rtstk` pops the 0th value off the temporary stack, restores the previous stack, and pushes this value.
 
+`dtstk` is like tstk except that it duplicates the present stack into the new temporary one.
+
 `tstk` calls can be nested; each `untstk` or `rtstk` ascends one level of nesting.
+
+### `lstk`, `unlstk`
+
+`lstk` turns the stack into a list, which becomes the only element on the stack.
+
+`unlstk` takes the 0th element of the stack, which must be a list, and expands it onto
+the stack.
+
+`lstk unlstk` is idempotent.
+
+This can be used to return the entire contents of a temporary stack to its predecessor using rtstk.
 
 ### exception handling *NOT YET IMPLEMENTED*
 
