@@ -223,3 +223,17 @@
                   state
                   '_stack_display_depth)))
 
+; turn the stack into a list, which becomes
+; the only element on the stack
+(define (stackToList stack)
+  (list '() stack))
+(define (stStackToList state)
+  (stStackUpd2 stackToList state))
+
+; opposite of the above - take 0th element
+; on the stack, and expand it onto the stack
+(define (listToStack stack)
+  (cons '() (append (car stack) (cdr stack))))
+(define (stListToStack state)
+  (stStackUpd2 listToStack state))
+

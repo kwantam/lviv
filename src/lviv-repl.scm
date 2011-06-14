@@ -98,6 +98,8 @@
         `(untstk . ,(stUnTStk #f))
         `(rtstk . ,(stUnTStk #t))
         `(stk . ,stPrintStack)
+        `(lstk . ,stStackToList)
+        `(unlstk . ,stListToStack)
         ))
 
 ; list of stackops; doing this now lets us not
