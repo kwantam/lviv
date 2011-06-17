@@ -1,0 +1,5 @@
+
+; we can use unlambda to do a weird kind of quine
+( lambda unlambda swap dup 3 unroll reverse unlstk 100 *_stack_display_depth define #t *_stack_display_pretty define ) ()
+  lambda unlambda swap dup 3 unroll reverse unlstk 100 *_stack_display_depth define #t *_stack_display_pretty define
+

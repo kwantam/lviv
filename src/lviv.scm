@@ -40,7 +40,7 @@
 (define (lviv-process-args arglist)
   (cond ((null? arglist) #f)
         ((equal? "-" (car arglist))
-         (lviv-repl lvivState #f)
+         (lviv-repl lvivState '())
          (lviv-process-args (cdr arglist)))
         (else
           (lviv-file lvivState (car arglist))
@@ -56,16 +56,15 @@
       (c1line (cdr (command-line))))
   (cond ((null? c1line) ; no arguments at all
          (display "welcome to lviv\n\n")
-         (lviv-repl lvivState #f))
+         (lviv-repl lvivState '()))
         ((not c--line) ; didn't find -- delimiter
          (lviv-process-args c1line))
         ((null? (cdr c--line)) ; found --, if it's last arg just do repl
          (display "welcome to lviv\n\n")
-         (lviv-repl lvivState #f))
+         (lviv-repl lvivState '()))
         ; otherwise process args after --
         (else
           (lviv-process-args (cdr c--line)))))
 
 ; print the stack before we exit
-(define (main . _)
-  (stPrintStack lvivState))
+(define (main . _) #f)

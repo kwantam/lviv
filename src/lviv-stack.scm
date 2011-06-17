@@ -228,7 +228,10 @@
   (lviv-ppstack (stGetStack state)
                 (stEnvLookupBinding
                   state
-                  '_stack_display_depth)))
+                  '_stack_display_depth)
+                (stEnvLookupBinding
+                  state
+                  '_stack_display_pretty)))
 
 ; turn the stack into a list, which becomes
 ; the only element on the stack
