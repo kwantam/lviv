@@ -166,6 +166,9 @@
 
 ; env prints out the environment
 (define (stEnv state)
-  (begin (lviv-ppenv (stGetEnv state))
+  (begin (lviv-ppenv (stGetEnv state)
+                     (stEnvLookupBinding
+                       state
+                       '_stack_display_pretty))
          (eRight '())))
 

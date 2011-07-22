@@ -311,11 +311,14 @@
 
 ; pretty-print the environment, surrounding
 ; each level of the env with a { }
-(define (lviv-ppenv env)
-  (if (null? env)
-    (newline)
-    (begin (display "{\n")
-           (map (lviv-pp #t) (car env))
-           (display "}\n")
-           (lviv-ppenv (cdr env)))))
-
+(define (lviv-ppenv env pretty?)
+  (let ((pprint (if (eRight? pretty?)
+                  (not (fromLeftRight pretty?))
+                  #t)))
+    (let loop ((e env))
+      (if (null? e)
+        (newline)
+        (begin (display "{\n")
+               (map (lviv-pp #t pprint) (car e))
+               (display "}\n")
+               (loop (cdr e)))))))
