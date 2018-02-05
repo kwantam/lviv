@@ -231,7 +231,10 @@
                   '_stack_display_depth)
                 (stEnvLookupBinding
                   state
-                  '_stack_display_pretty)))
+                  '_stack_display_pretty)
+                (stEnvLookupBinding
+                  state
+                  '_stack_display_int_eng)))
 
 ; turn the stack into a list, which becomes
 ; the only element on the stack
